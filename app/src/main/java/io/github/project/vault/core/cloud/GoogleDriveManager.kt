@@ -349,7 +349,7 @@ class GoogleDriveManager(private val context: Context) : CloudProvider {
                         for (i in 0 until filesArray.length()) {
                             val f = filesArray.getJSONObject(i)
                             val id = f.getString("id")
-                            if (items.none { it.id == id }) {
+                            if (items.none { it.fileId == id }) {
                                 val name = f.getString("name")
                                 val size = f.optLong("size", 0L)
                                 val modified = System.currentTimeMillis()
