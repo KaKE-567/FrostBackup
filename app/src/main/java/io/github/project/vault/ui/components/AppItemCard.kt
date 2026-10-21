@@ -134,13 +134,17 @@ fun AppItemCard(
                     Spacer(modifier = Modifier.height(3.dp))
 
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = if (app.appSizeFormatted.isNotEmpty()) "v${app.versionName} • ${app.appSizeFormatted}" else "v${app.versionName}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
+                            color = MaterialTheme.colorScheme.outline,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
 
                         if (app.hasBackup) {
@@ -168,15 +172,6 @@ fun AppItemCard(
                         contentDescription = if (expanded) "Collapse" else "Expand",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.rotate(rotationAngle)
-                    )
-                }
-
-                // Quick single-tap Backup
-                IconButton(onClick = onBackupClicked) {
-                    Icon(
-                        imageVector = Icons.Default.Archive,
-                        contentDescription = "Backup App",
-                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
             }

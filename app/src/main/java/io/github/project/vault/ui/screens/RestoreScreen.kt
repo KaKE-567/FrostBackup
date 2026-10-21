@@ -171,11 +171,13 @@ fun RestoreScreen(
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
-                top = innerPadding.calculateTopPadding() + 12.dp,
+                top = 12.dp,
                 bottom = innerPadding.calculateBottomPadding() + 24.dp
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = innerPadding.calculateTopPadding())
         ) {
             // Archives Summary Hero Card
             item(key = "restore_hero_card") {

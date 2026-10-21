@@ -79,10 +79,12 @@ private fun restartAppProcess(context: Context) {
                 flags
             )
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
-            alarmManager?.set(android.app.AlarmManager.RTC, System.currentTimeMillis() + 250, pendingIntent)
-            context.startActivity(intent)
+            alarmManager?.set(android.app.AlarmManager.RTC, System.currentTimeMillis() + 150, pendingIntent)
         }
     } catch (_: Throwable) {}
+    if (context is android.app.Activity) {
+        context.finishAffinity()
+    }
     android.os.Process.killProcess(android.os.Process.myPid())
     kotlin.system.exitProcess(0)
 }
