@@ -330,7 +330,7 @@ fun RootGateScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "1. In your root manager (KernelSU / APatch / Magisk), grant root access to FrostBackup.\n2. Tap 'Relaunch App to Apply Root' above.\nThe app will restart in 100ms with root active!",
+                            text = "1. In your root manager (KernelSU / APatch / Magisk), grant root access to FrostBackup.\n2. Tap 'Relaunch App to Apply Root' above.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
