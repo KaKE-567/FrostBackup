@@ -58,35 +58,41 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import io.github.project.vault.core.root.RootShell
 import io.github.project.vault.ui.components.StatusBadge
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private fun restartAppProcess(context: Context) {
+    val packageName = context.packageName
+    val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)?.apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+    }
+
+    // 1. Launch new activity instance via Android framework
     try {
-        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-        }
-        if (intent != null) {
-            val flags = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                android.app.PendingIntent.FLAG_CANCEL_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
-            } else {
-                android.app.PendingIntent.FLAG_CANCEL_CURRENT
-            }
-            val pendingIntent = android.app.PendingIntent.getActivity(
-                context.applicationContext,
-                223344,
-                intent,
-                flags
-            )
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
-            alarmManager?.set(android.app.AlarmManager.RTC, System.currentTimeMillis() + 150, pendingIntent)
+        if (launchIntent != null) {
+            context.startActivity(launchIntent)
         }
     } catch (_: Throwable) {}
+
+    // 2. Schedule guaranteed background launch via shell
+    try {
+        val amCmd = "(sleep 0.35 && am start -n $packageName/io.github.project.vault.ui.MainActivity) &"
+        Runtime.getRuntime().exec(arrayOf("sh", "-c", amCmd))
+    } catch (_: Throwable) {}
+
+    // 3. Finish current activity cleanly
     if (context is android.app.Activity) {
         context.finishAffinity()
     }
-    android.os.Process.killProcess(android.os.Process.myPid())
-    kotlin.system.exitProcess(0)
+
+    // 4. Terminate previous process so root manager can attach to the new process
+    CoroutineScope(Dispatchers.Default).launch {
+        delay(250)
+        android.os.Process.killProcess(android.os.Process.myPid())
+        kotlin.system.exitProcess(0)
+    }
 }
 
 @Composable
