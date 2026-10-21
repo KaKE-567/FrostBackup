@@ -400,7 +400,7 @@ private suspend fun executeRestore(
     when (result) {
         is RestoreResult.Success -> {
             snackbarHostState.showSnackbar("Restored ${item.appName} successfully!")
-            onFinished(result.requiresReboot)
+            onFinished(result.needsReboot)
         }
         is RestoreResult.Error -> {
             snackbarHostState.showSnackbar("Restore failed for ${item.appName}: ${result.message}")
