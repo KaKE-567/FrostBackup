@@ -6,6 +6,15 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
@@ -60,90 +69,105 @@ class MainActivity : ComponentActivity() {
                 FrostedBackground {
                     var isRootGranted by remember { mutableStateOf<Boolean?>(null) }
 
-                    if (isRootGranted != true) {
-                        RootGateScreen(
-                            onRootGranted = {
-                                isRootGranted = true
-                            }
-                        )
-                    } else {
-                        val navController = rememberNavController()
-                        val backupRepository = remember { BackupRepository(applicationContext) }
-                        val appRepository = remember { AppRepository(applicationContext, backupRepository) }
+                    AnimatedContent(
+                        targetState = (isRootGranted == true),
+                        transitionSpec = {
+                            (fadeIn(animationSpec = tween(450, delayMillis = 60, easing = FastOutSlowInEasing)) +
+                             scaleIn(initialScale = 0.94f, animationSpec = tween(450, delayMillis = 60, easing = FastOutSlowInEasing)) +
+                             slideInVertically(initialOffsetY = { it / 25 }, animationSpec = tween(450, delayMillis = 60, easing = FastOutSlowInEasing)))
+                                .togetherWith(
+                                    fadeOut(animationSpec = tween(350, easing = FastOutSlowInEasing)) +
+                                    scaleOut(targetScale = 1.04f, animationSpec = tween(350, easing = FastOutSlowInEasing))
+                                )
+                        },
+                        label = "RootGateTransition",
+                        modifier = Modifier.fillMaxSize()
+                    ) { hasRoot ->
+                        if (!hasRoot) {
+                            RootGateScreen(
+                                onRootGranted = {
+                                    isRootGranted = true
+                                }
+                            )
+                        } else {
+                            val navController = rememberNavController()
+                            val backupRepository = remember { BackupRepository(applicationContext) }
+                            val appRepository = remember { AppRepository(applicationContext, backupRepository) }
 
-                        val screens = listOf(
-                            Screen.Apps,
-                            Screen.Restore,
-                            Screen.Cloud,
-                            Screen.Settings
-                        )
+                            val screens = listOf(
+                                Screen.Apps,
+                                Screen.Restore,
+                                Screen.Cloud,
+                                Screen.Settings
+                            )
 
-                        val navBackStackEntry by navController.currentBackStackEntryAsState()
-                        val currentRoute = navBackStackEntry?.destination?.route
+                            val navBackStackEntry by navController.currentBackStackEntryAsState()
+                            val currentRoute = navBackStackEntry?.destination?.route
 
-                        Scaffold(
-                            containerColor = Color.Transparent,
-                            contentColor = MaterialTheme.colorScheme.onBackground,
-                            bottomBar = {
-                                val outlineColor = MaterialTheme.colorScheme.outline
-                                NavigationBar(
-                                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                                    tonalElevation = 0.dp,
-                                    modifier = Modifier.drawBehind {
-                                        drawLine(
-                                            color = outlineColor.copy(alpha = 0.18f),
-                                            start = Offset(0f, 0f),
-                                            end = Offset(size.width, 0f),
-                                            strokeWidth = 1.dp.toPx()
-                                        )
-                                    }
-                                ) {
-                                    screens.forEach { screen ->
-                                        val selected = currentRoute == screen.route
-                                        NavigationBarItem(
-                                            selected = selected,
-                                            onClick = {
-                                                if (currentRoute != screen.route) {
-                                                    navController.navigate(screen.route) {
-                                                        popUpTo(navController.graph.findStartDestination().id) {
-                                                            saveState = true
-                                                        }
-                                                        launchSingleTop = true
-                                                        restoreState = true
-                                                    }
-                                                }
-                                            },
-                                            icon = { Icon(screen.icon, contentDescription = screen.title) },
-                                            label = { Text(screen.title) }
-                                        )
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxSize()
-                        ) { innerPadding ->
-                            NavHost(
-                                navController = navController,
-                                startDestination = Screen.Apps.route,
-                                modifier = Modifier.padding(innerPadding)
-                            ) {
-                                composable(Screen.Apps.route) {
-                                    AppListScreen(appRepository = appRepository, backupRepository = backupRepository)
-                                }
-                                composable(Screen.Restore.route) {
-                                    RestoreScreen(backupRepository = backupRepository)
-                                }
-                                composable(Screen.Cloud.route) {
-                                    CloudScreen(backupRepository = backupRepository)
-                                }
-                                composable(Screen.Settings.route) {
-                                    SettingsScreen(
-                                        backupRepository = backupRepository,
-                                        currentThemeMode = currentThemeMode,
-                                        onThemeChanged = { newMode ->
-                                            currentThemeMode = newMode
-                                            ThemePreference.setThemeMode(applicationContext, newMode)
+                            Scaffold(
+                                containerColor = Color.Transparent,
+                                contentColor = MaterialTheme.colorScheme.onBackground,
+                                bottomBar = {
+                                    val outlineColor = MaterialTheme.colorScheme.outline
+                                    NavigationBar(
+                                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                        tonalElevation = 0.dp,
+                                        modifier = Modifier.drawBehind {
+                                            drawLine(
+                                                color = outlineColor.copy(alpha = 0.18f),
+                                                start = Offset(0f, 0f),
+                                                end = Offset(size.width, 0f),
+                                                strokeWidth = 1.dp.toPx()
+                                            )
                                         }
-                                    )
+                                    ) {
+                                        screens.forEach { screen ->
+                                            val selected = currentRoute == screen.route
+                                            NavigationBarItem(
+                                                selected = selected,
+                                                onClick = {
+                                                    if (currentRoute != screen.route) {
+                                                        navController.navigate(screen.route) {
+                                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                                saveState = true
+                                                            }
+                                                            launchSingleTop = true
+                                                            restoreState = true
+                                                        }
+                                                    }
+                                                },
+                                                icon = { Icon(screen.icon, contentDescription = screen.title) },
+                                                label = { Text(screen.title) }
+                                            )
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            ) { innerPadding ->
+                                NavHost(
+                                    navController = navController,
+                                    startDestination = Screen.Apps.route,
+                                    modifier = Modifier.padding(innerPadding)
+                                ) {
+                                    composable(Screen.Apps.route) {
+                                        AppListScreen(appRepository = appRepository, backupRepository = backupRepository)
+                                    }
+                                    composable(Screen.Restore.route) {
+                                        RestoreScreen(backupRepository = backupRepository)
+                                    }
+                                    composable(Screen.Cloud.route) {
+                                        CloudScreen(backupRepository = backupRepository)
+                                    }
+                                    composable(Screen.Settings.route) {
+                                        SettingsScreen(
+                                            backupRepository = backupRepository,
+                                            currentThemeMode = currentThemeMode,
+                                            onThemeChanged = { newMode ->
+                                                currentThemeMode = newMode
+                                                ThemePreference.setThemeMode(applicationContext, newMode)
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }

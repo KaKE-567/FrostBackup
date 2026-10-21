@@ -2,6 +2,11 @@ package io.github.project.vault.ui.screens
 
 import android.content.Context
 import android.content.Intent
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -21,7 +26,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
@@ -58,13 +62,27 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private fun restartAppProcess(context: Context) {
-    val pm = context.packageManager
-    val intent = pm.getLaunchIntentForPackage(context.packageName)?.apply {
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-    }
-    if (intent != null) {
-        context.startActivity(intent)
-    }
+    try {
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        }
+        if (intent != null) {
+            val flags = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                android.app.PendingIntent.FLAG_CANCEL_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            } else {
+                android.app.PendingIntent.FLAG_CANCEL_CURRENT
+            }
+            val pendingIntent = android.app.PendingIntent.getActivity(
+                context.applicationContext,
+                223344,
+                intent,
+                flags
+            )
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
+            alarmManager?.set(android.app.AlarmManager.RTC, System.currentTimeMillis() + 250, pendingIntent)
+            context.startActivity(intent)
+        }
+    } catch (_: Throwable) {}
     android.os.Process.killProcess(android.os.Process.myPid())
     kotlin.system.exitProcess(0)
 }
@@ -184,6 +202,11 @@ fun RootGateScreen(
                     modifier = Modifier.padding(18.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    val statusIconColor by animateColorAsState(
+                        targetValue = if (isRooted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        label = "StatusIconColor"
+                    )
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -191,7 +214,7 @@ fun RootGateScreen(
                         Icon(
                             imageVector = Icons.Default.Security,
                             contentDescription = null,
-                            tint = if (isRooted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                            tint = statusIconColor
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
@@ -201,17 +224,25 @@ fun RootGateScreen(
                         )
                         Spacer(modifier = Modifier.weight(1f))
 
-                        if (isChecking) {
-                            CircularProgressIndicator(
-                                strokeWidth = 2.dp,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        } else {
-                            StatusBadge(
-                                text = if (isRooted) "Granted" else "Denied",
-                                containerColor = if (isRooted) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
-                                contentColor = if (isRooted) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
-                            )
+                        AnimatedContent(
+                            targetState = isChecking,
+                            transitionSpec = {
+                                fadeIn() togetherWith fadeOut()
+                            },
+                            label = "BadgeStatusTransition"
+                        ) { checking ->
+                            if (checking) {
+                                CircularProgressIndicator(
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            } else {
+                                StatusBadge(
+                                    text = if (isRooted) "Granted" else "Denied",
+                                    containerColor = if (isRooted) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
+                                    contentColor = if (isRooted) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
                         }
                     }
 
@@ -240,9 +271,7 @@ fun RootGateScreen(
                     .fillMaxWidth()
                     .height(52.dp)
             ) {
-                Icon(Icons.Default.Bolt, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("⚡ Relaunch App to Apply Root", fontWeight = FontWeight.Bold)
+                Text("Relaunch App to Apply Root", fontWeight = FontWeight.Bold)
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -301,7 +330,7 @@ fun RootGateScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "1. In your root manager (KernelSU / APatch / Magisk), grant root access to FrostBackup.\n2. Tap '⚡ Relaunch App to Apply Root' above.\nThe app will restart in 100ms with root active!",
+                            text = "1. In your root manager (KernelSU / APatch / Magisk), grant root access to FrostBackup.\n2. Tap 'Relaunch App to Apply Root' above.\nThe app will restart in 100ms with root active!",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
