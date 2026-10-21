@@ -150,7 +150,7 @@ class MainActivity : ComponentActivity() {
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .padding(innerPadding),
-                                    beyondViewportPageCount = 1
+                                    beyondBoundsPageCount = 1
                                 ) { page ->
                                     when (page) {
                                         0 -> AppListScreen(appRepository = appRepository, backupRepository = backupRepository)
@@ -182,12 +182,15 @@ class MainActivity : ComponentActivity() {
     private fun handleOAuthIntent(intent: Intent?) {
         val uri = intent?.data ?: return
         if (uri.scheme == "io.github.project.vault" && uri.host == "oauth2redirect") {
-            lifecycleScope.launch {
-                val success = OAuthManager.handleOAuthResponse(this@MainActivity, uri)
-                if (success) {
-                    Toast.makeText(this@MainActivity, "Google Drive connected successfully", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(this@MainActivity, "Failed to connect Google Drive", Toast.LENGTH_LONG).show()
+            val code = uri.getQueryParameter("code")
+            if (!code.isNullOrBlank()) {
+                lifecycleScope.launch {
+                    val success = OAuthManager.handleAuthCode(applicationContext, code)
+                    if (success) {
+                        Toast.makeText(applicationContext, "Successfully connected to Google Drive!", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(applicationContext, "Google authentication failed", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }
