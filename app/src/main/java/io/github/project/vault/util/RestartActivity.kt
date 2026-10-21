@@ -6,26 +6,102 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import io.github.project.vault.ui.theme.AppVaultTheme
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Isolated trampoline activity running in its own process (:restart) to reliably
  * restart the main application process.
  *
- * This ensures that when KernelSU, Magisk, or APatch requires the target app's
- * process to be recreated from zygote for superuser credentials to attach,
- * the old process is terminated and a completely fresh process is spawned
- * without race conditions or self-terminating timers.
+ * It displays an opaque frosted transition screen so the launcher wallpaper
+ * is never exposed during KernelSU process recreation.
  */
-class RestartActivity : Activity() {
+class RestartActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         @Suppress("DEPRECATION")
-        overridePendingTransition(0, 0)
+        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
 
+        // Kill the old main process immediately in the background so KernelSU resets credentials
         val mainPid = intent.getIntExtra(EXTRA_MAIN_PID, -1)
         if (mainPid > 0) {
             Process.killProcess(mainPid)
+        }
+
+        // Show elegant dark frosted screen to completely prevent any wallpaper exposure
+        setContent {
+            AppVaultTheme {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFF0B0F0D)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(88.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF1B2A22)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AdminPanelSettings,
+                                contentDescription = null,
+                                tint = Color(0xFF6CDBB2),
+                                modifier = Modifier.size(48.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        CircularProgressIndicator(
+                            strokeWidth = 3.dp,
+                            color = Color(0xFF6CDBB2),
+                            modifier = Modifier.size(28.dp)
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Text(
+                            text = "Applying superuser privileges…",
+                            color = Color(0xFFCEE9DA),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
         }
 
         val restartIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -35,13 +111,17 @@ class RestartActivity : Activity() {
             intent.getParcelableExtra(EXTRA_RESTART_INTENT)
         }
 
-        if (restartIntent != null) {
-            restartIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            startActivity(restartIntent)
+        CoroutineScope(Dispatchers.Main).launch {
+            delay(120)
+            if (restartIntent != null) {
+                restartIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                startActivity(restartIntent)
+            }
+            delay(500)
+            finish()
+            @Suppress("DEPRECATION")
+            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
         }
-
-        finish()
-        Runtime.getRuntime().exit(0)
     }
 
     companion object {
@@ -62,9 +142,10 @@ class RestartActivity : Activity() {
 
             context.startActivity(intent)
             if (context is Activity) {
-                context.finishAffinity()
+                @Suppress("DEPRECATION")
+                context.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                context.finish()
             }
-            Runtime.getRuntime().exit(0)
         }
     }
 }

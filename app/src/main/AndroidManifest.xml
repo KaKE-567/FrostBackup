@@ -59,7 +59,7 @@
         <activity
             android:name=".util.RestartActivity"
             android:process=":restart"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:theme="@style/Theme.AppVault"
             android:exported="false" />
 
         <provider
