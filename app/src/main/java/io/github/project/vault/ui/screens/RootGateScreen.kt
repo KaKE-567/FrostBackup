@@ -22,18 +22,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -84,15 +80,6 @@ fun RootGateScreen(
     var rootStatusText by remember { mutableStateOf("Checking superuser access…") }
     var isRooted by remember { mutableStateOf(false) }
 
-    val ksuPackage = "me.weishu.kernelsu"
-    val hasKsu = remember {
-        try {
-            context.packageManager.getPackageInfo(ksuPackage, 0) != null
-        } catch (e: Exception) {
-            false
-        }
-    }
-
     fun checkRoot() {
         scope.launch {
             isChecking = true
@@ -106,11 +93,7 @@ fun RootGateScreen(
                 delay(400)
                 onRootGranted()
             } else {
-                rootStatusText = if (hasKsu) {
-                    "Superuser not granted yet. If you just toggled it in KernelSU, tap 'Relaunch App to Apply' below."
-                } else {
-                    "Superuser access not granted yet. Please allow root access to continue."
-                }
+                rootStatusText = "Superuser not granted yet. If you just toggled root in your manager, tap 'Relaunch App to Apply'."
             }
         }
     }
@@ -120,7 +103,7 @@ fun RootGateScreen(
         checkRoot()
     }
 
-    // Auto-detect when returning from KernelSU or Magisk manager
+    // Auto-detect when returning to app
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -245,7 +228,7 @@ fun RootGateScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // KernelSU Quick Relaunch Button (Solves KernelSU process restart requirement)
+            // Quick Relaunch Button (Solves KernelSU process restart requirement in 1 tap)
             Button(
                 onClick = { restartAppProcess(context) },
                 colors = ButtonDefaults.buttonColors(
@@ -259,7 +242,7 @@ fun RootGateScreen(
             ) {
                 Icon(Icons.Default.Bolt, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("⚡ Relaunch App to Apply Root (KernelSU)", fontWeight = FontWeight.Bold)
+                Text("⚡ Relaunch App to Apply Root", fontWeight = FontWeight.Bold)
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -283,28 +266,7 @@ fun RootGateScreen(
                 } else {
                     Icon(Icons.Default.Refresh, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Check Root Status Again")
-                }
-            }
-
-            // Direct shortcut to KernelSU Manager if installed
-            if (hasKsu) {
-                Spacer(modifier = Modifier.height(10.dp))
-                FilledTonalButton(
-                    onClick = {
-                        val launchIntent = context.packageManager.getLaunchIntentForPackage(ksuPackage)
-                        if (launchIntent != null) {
-                            context.startActivity(launchIntent)
-                        }
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                ) {
-                    Icon(Icons.Default.OpenInNew, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Open KernelSU Manager")
+                    Text("Refresh / Check Root Again")
                 }
             }
 
@@ -333,13 +295,13 @@ fun RootGateScreen(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = "KernelSU Instructions",
+                            text = "Superuser Instructions",
                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "1. Tap 'Open KernelSU Manager' above (or open KernelSU manually).\n2. In Superuser, toggle FrostBackup ON.\n3. Return here and tap '⚡ Relaunch App to Apply Root'.\nThe app will restart in 100ms with root active!",
+                            text = "1. In your root manager (KernelSU / APatch / Magisk), grant root access to FrostBackup.\n2. Tap '⚡ Relaunch App to Apply Root' above.\nThe app will restart in 100ms with root active!",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
