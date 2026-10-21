@@ -21,8 +21,8 @@ import java.security.SecureRandom
 
 object OAuthManager {
     // Reassembled at runtime to satisfy GitHub Push Protection for public desktop client
-    private val CLIENT_ID = arrayOf("1003897370002", "-maol3ap26psr9c37kggb0n9851ddaq4d", ".apps.", "googleusercontent.com").joinToString("")
-    private val CLIENT_SECRET = arrayOf("GOCSPX", "-GQIgRYHNNaav", "WKwFy9rlcdoRUGwN").joinToString("")
+    val CLIENT_ID = arrayOf("1003897370002", "-maol3ap26psr9c37kggb0n9851ddaq4d", ".apps.", "googleusercontent.com").joinToString("")
+    val CLIENT_SECRET = arrayOf("GOCSPX", "-GQIgRYHNNaav", "WKwFy9rlcdoRUGwN").joinToString("")
 
     const val LOOPBACK_PORT = 53682
     const val REDIRECT_URI = "http://127.0.0.1:$LOOPBACK_PORT"
@@ -46,7 +46,7 @@ object OAuthManager {
         // 2. Start Localhost Loopback Receiver
         startLoopbackServer(context, onAuthComplete)
 
-        // 3. Build Authorization URL with user's real registered Client ID
+        // 3. Build Authorization URL with user's real registered Client ID and offline access
         val authUri = Uri.parse(AUTH_URL).buildUpon()
             .appendQueryParameter("client_id", CLIENT_ID)
             .appendQueryParameter("redirect_uri", REDIRECT_URI)
@@ -54,7 +54,8 @@ object OAuthManager {
             .appendQueryParameter("scope", "https://www.googleapis.com/auth/drive.appdata email profile")
             .appendQueryParameter("code_challenge", codeChallenge)
             .appendQueryParameter("code_challenge_method", "S256")
-            .appendQueryParameter("prompt", "select_account")
+            .appendQueryParameter("access_type", "offline")
+            .appendQueryParameter("prompt", "consent select_account")
             .build()
 
         // 4. Open in Chrome Custom Tabs or default browser
@@ -144,6 +145,7 @@ object OAuthManager {
 
             val jsonResponse = JSONObject(response.body?.string() ?: "")
             val accessToken = jsonResponse.getString("access_token")
+            val refreshToken = jsonResponse.optString("refresh_token", null)
 
             val profileRequest = Request.Builder()
                 .url(USER_INFO_URL)
@@ -160,7 +162,7 @@ object OAuthManager {
             }
 
             val driveManager = GoogleDriveManager(context)
-            driveManager.saveAccount(email, displayName, accessToken)
+            driveManager.saveAccount(email, displayName, accessToken, refreshToken)
             prefs.edit().remove(PREF_KEY_VERIFIER).apply()
             true
         } catch (e: Exception) {

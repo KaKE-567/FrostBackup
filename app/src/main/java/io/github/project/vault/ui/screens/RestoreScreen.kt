@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
@@ -158,6 +159,17 @@ fun RestoreScreen(
                                     reloadBackups()
                                     snackbarHostState.showSnackbar("Backup deleted")
                                 }
+                            },
+                            onUploadToCloud = {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Uploading ${item.appName} to Google Drive…")
+                                    val ok = backupRepository.uploadToCloud(item.archiveFileName)
+                                    if (ok) {
+                                        snackbarHostState.showSnackbar("Uploaded ${item.appName} to Google Drive!")
+                                    } else {
+                                        snackbarHostState.showSnackbar("Cloud upload failed. Please verify Google Drive sign-in.")
+                                    }
+                                }
                             }
                         )
                     }
@@ -282,7 +294,8 @@ private suspend fun executeRestore(
 private fun BackupItemCard(
     metadata: BackupMetadata,
     onRestore: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onUploadToCloud: () -> Unit
 ) {
     val dateFormatter = remember { SimpleDateFormat("MMM dd, yyyy • HH:mm", Locale.getDefault()) }
     val formattedDate = remember(metadata.backupTimestamp) {
@@ -353,6 +366,14 @@ private fun BackupItemCard(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                IconButton(onClick = onUploadToCloud) {
+                    Icon(
+                        imageVector = Icons.Default.CloudUpload,
+                        contentDescription = "Upload to Cloud",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
                 IconButton(onClick = onDelete) {
                     Icon(
                         imageVector = Icons.Default.Delete,

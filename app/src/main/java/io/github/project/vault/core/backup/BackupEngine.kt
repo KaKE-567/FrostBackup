@@ -30,7 +30,7 @@ class BackupEngine(private val context: Context) {
         }
 
         val timestamp = System.currentTimeMillis()
-        val stagingPath = "/data/local/tmp/vault_${app.packageName}_$timestamp"
+        val stagingPath = File(context.cacheDir, "stage_${app.packageName}_$timestamp").absolutePath
         val payloadPath = "$stagingPath/payload"
 
         // Ensure destination folder is created via root so Android Scoped Storage does not block it
@@ -41,6 +41,7 @@ class BackupEngine(private val context: Context) {
             onProgress(BackupProgress("Freezing app process…", 0.1f, app.appName))
             RootShell.execute("am force-stop ${app.packageName}")
             RootShell.execute("mkdir -p $payloadPath/apk $payloadPath/keystore")
+            RootShell.execute("chmod -R 777 $stagingPath")
 
             // 1. Back up APKs
             if (config.includeApk) {
@@ -124,7 +125,7 @@ class BackupEngine(private val context: Context) {
             metaFile.writeText(metadataString)
             RootShell.execute("cp ${metaFile.absolutePath} $payloadPath/metadata.json")
 
-            // 8. Package staging folder into bundle inside /data/local/tmp
+            // 8. Package staging folder into bundle inside app cache staging area
             onProgress(BackupProgress("Compressing backup package…", 0.85f, app.appName))
             val rawBundlePath = "$stagingPath/bundle.tar"
             val finalBundlePath = "$stagingPath/final.vault"
@@ -133,6 +134,7 @@ class BackupEngine(private val context: Context) {
             if (!tarResult.isSuccess) {
                 return@withContext BackupResult.Error("Failed to create backup archive: ${tarResult.stderr}")
             }
+            RootShell.execute("chmod 666 $rawBundlePath")
 
             // 9. Client-Side Encryption
             if (config.encrypt && !config.encryptionPassword.isNullOrBlank()) {
@@ -142,6 +144,7 @@ class BackupEngine(private val context: Context) {
             } else {
                 RootShell.execute("mv $rawBundlePath $finalBundlePath")
             }
+            RootShell.execute("chmod 666 $finalBundlePath")
 
             // 10. Copy final archive to storage destination via root
             onProgress(BackupProgress("Saving archive to storage…", 0.93f, app.appName))
@@ -149,18 +152,30 @@ class BackupEngine(private val context: Context) {
             RootShell.execute("chmod 664 ${finalArchiveFile.absolutePath}")
 
             // 11. Google Drive Cloud Upload
+            var cloudUploaded = false
             if (config.uploadToCloud) {
                 onProgress(BackupProgress("Uploading to Google Drive…", 0.95f, app.appName))
                 val drive = GoogleDriveManager(context)
                 if (drive.isConnected()) {
-                    drive.uploadBackup(File(finalBundlePath), metadataString) {}
+                    val uploadSuccess = drive.uploadBackup(File(finalBundlePath), metadataString) {}
+                    if (uploadSuccess) {
+                        cloudUploaded = true
+                    } else {
+                        onProgress(BackupProgress("Google Drive upload failed (saved locally)", 0.98f, app.appName))
+                    }
                 }
             }
 
             val sizeResult = RootShell.execute("stat -c %s ${finalArchiveFile.absolutePath} 2>/dev/null || wc -c < ${finalArchiveFile.absolutePath}")
             val finalSize = sizeResult.stdout.trim().toLongOrNull() ?: 0L
 
-            onProgress(BackupProgress("Backup completed successfully!", 1.0f, app.appName))
+            val completionMessage = if (config.uploadToCloud) {
+                if (cloudUploaded) "Backup & Google Drive sync completed!" else "Local backup saved (cloud upload failed)"
+            } else {
+                "Backup completed successfully!"
+            }
+
+            onProgress(BackupProgress(completionMessage, 1.0f, app.appName))
             BackupResult.Success(finalArchiveFile.absolutePath, finalSize)
         } catch (e: Exception) {
             e.printStackTrace()

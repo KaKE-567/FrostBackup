@@ -2,6 +2,7 @@ package io.github.project.vault.data.repository
 
 import android.content.Context
 import android.os.Environment
+import io.github.project.vault.core.cloud.GoogleDriveManager
 import io.github.project.vault.core.root.RootShell
 import io.github.project.vault.data.model.BackupMetadata
 import kotlinx.coroutines.Dispatchers
@@ -74,5 +75,26 @@ class BackupRepository(private val context: Context) {
         val filePath = "${getBackupDirectory().absolutePath}/$archiveFileName"
         val result = RootShell.execute("rm -f $filePath")
         result.isSuccess
+    }
+
+    suspend fun uploadToCloud(archiveFileName: String): Boolean = withContext(Dispatchers.IO) {
+        val backupDir = getBackupDirectory()
+        val archiveFile = File(backupDir, archiveFileName)
+        val metaResult = RootShell.execute("tar -xOf ${archiveFile.absolutePath} ./metadata.json 2>/dev/null")
+        val metaString = if (metaResult.isSuccess && metaResult.stdout.isNotBlank()) metaResult.stdout else "{}"
+
+        val cacheStaging = File(context.cacheDir, "upload_$archiveFileName")
+        try {
+            RootShell.execute("cp -p ${archiveFile.absolutePath} ${cacheStaging.absolutePath}")
+            RootShell.execute("chmod 666 ${cacheStaging.absolutePath}")
+
+            val drive = GoogleDriveManager(context)
+            if (!drive.isConnected()) return@withContext false
+            drive.uploadBackup(cacheStaging, metaString) {}
+        } catch (e: Exception) {
+            false
+        } finally {
+            RootShell.execute("rm -f ${cacheStaging.absolutePath}")
+        }
     }
 }
