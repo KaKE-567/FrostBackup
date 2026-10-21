@@ -14,7 +14,7 @@ object RootShell {
     suspend fun isRootAvailable(forceCheck: Boolean = false): Boolean = withContext(Dispatchers.IO) {
         if (!forceCheck && isRootedCache == true) return@withContext true
         clearCache()
-        val result = execute("id", timeoutMs = 8000L)
+        val result = execute("id", timeoutMs = 25_000L)
         val isRoot = result.isSuccess && (result.stdout.contains("uid=0(root)") || result.stdout.contains("uid=0"))
         if (isRoot) {
             isRootedCache = true
