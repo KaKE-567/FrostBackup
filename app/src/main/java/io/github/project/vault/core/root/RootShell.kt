@@ -10,11 +10,14 @@ import java.io.InputStreamReader
 object RootShell {
     private var isRootedCache: Boolean? = null
 
-    suspend fun isRootAvailable(): Boolean = withContext(Dispatchers.IO) {
-        if (isRootedCache != null) return@withContext isRootedCache!!
-        val result = execute("id")
-        val isRoot = result.isSuccess && result.stdout.contains("uid=0(root)")
-        isRootedCache = isRoot
+    suspend fun isRootAvailable(forceCheck: Boolean = false): Boolean = withContext(Dispatchers.IO) {
+        if (!forceCheck && isRootedCache == true) return@withContext true
+        clearCache()
+        val result = execute("id", timeoutMs = 8000L)
+        val isRoot = result.isSuccess && (result.stdout.contains("uid=0(root)") || result.stdout.contains("uid=0"))
+        if (isRoot) {
+            isRootedCache = true
+        }
         isRoot
     }
 
