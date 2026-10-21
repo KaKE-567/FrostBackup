@@ -1,6 +1,7 @@
 package io.github.project.vault
 
 import android.app.Application
+import android.os.Build
 import io.github.project.vault.core.root.RootShell
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -13,6 +14,15 @@ class VaultApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+
+        val processName = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            getProcessName()
+        } else {
+            packageName
+        }
+        if (processName.endsWith(":restart")) {
+            return
+        }
 
         // Check root access on startup asynchronously
         applicationScope.launch {

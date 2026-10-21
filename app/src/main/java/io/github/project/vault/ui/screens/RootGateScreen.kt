@@ -58,42 +58,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import io.github.project.vault.core.root.RootShell
 import io.github.project.vault.ui.components.StatusBadge
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import io.github.project.vault.util.RestartActivity
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-private fun restartAppProcess(context: Context) {
-    val packageName = context.packageName
-    val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)?.apply {
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-    }
-
-    // 1. Launch new activity instance via Android framework
-    try {
-        if (launchIntent != null) {
-            context.startActivity(launchIntent)
-        }
-    } catch (_: Throwable) {}
-
-    // 2. Schedule guaranteed background launch via shell
-    try {
-        val amCmd = "(sleep 0.35 && am start -n $packageName/io.github.project.vault.ui.MainActivity) &"
-        Runtime.getRuntime().exec(arrayOf("sh", "-c", amCmd))
-    } catch (_: Throwable) {}
-
-    // 3. Finish current activity cleanly
-    if (context is android.app.Activity) {
-        context.finishAffinity()
-    }
-
-    // 4. Terminate previous process so root manager can attach to the new process
-    CoroutineScope(Dispatchers.Default).launch {
-        delay(250)
-        android.os.Process.killProcess(android.os.Process.myPid())
-        kotlin.system.exitProcess(0)
-    }
-}
 
 @Composable
 fun RootGateScreen(
@@ -267,9 +234,27 @@ fun RootGateScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Quick Relaunch Button (Solves KernelSU process restart requirement in 1 tap)
+            // Quick Relaunch Button (Solves KernelSU process restart requirement cleanly)
             Button(
-                onClick = { restartAppProcess(context) },
+                onClick = {
+                    scope.launch {
+                        isChecking = true
+                        rootStatusText = "Verifying superuser access…"
+                        val hasRoot = RootShell.isRootAvailable(forceCheck = true)
+                        if (hasRoot) {
+                            isRooted = true
+                            isChecking = false
+                            rootStatusText = "Root access granted! Unlocking FrostBackup…"
+                            delay(350)
+                            onRootGranted()
+                        } else {
+                            rootStatusText = "Relaunching FrostBackup to apply root…"
+                            delay(200)
+                            RestartActivity.restart(context)
+                        }
+                    }
+                },
+                enabled = !isChecking,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary
@@ -279,7 +264,19 @@ fun RootGateScreen(
                     .fillMaxWidth()
                     .height(52.dp)
             ) {
-                Text("Relaunch App to Apply Root", fontWeight = FontWeight.Bold)
+                if (isChecking) {
+                    CircularProgressIndicator(
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Verifying…", fontWeight = FontWeight.Bold)
+                } else {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Relaunch App to Apply Root", fontWeight = FontWeight.Bold)
+                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))

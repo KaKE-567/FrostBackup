@@ -56,6 +56,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".util.RestartActivity"
+            android:process=":restart"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
