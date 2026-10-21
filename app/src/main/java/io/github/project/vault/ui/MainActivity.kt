@@ -1,6 +1,8 @@
 package io.github.project.vault.ui
 
+import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -14,11 +16,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import io.github.project.vault.core.cloud.OAuthManager
 import io.github.project.vault.data.repository.AppRepository
 import io.github.project.vault.data.repository.BackupRepository
 import io.github.project.vault.ui.navigation.Screen
@@ -27,11 +31,14 @@ import io.github.project.vault.ui.screens.CloudScreen
 import io.github.project.vault.ui.screens.RestoreScreen
 import io.github.project.vault.ui.screens.SettingsScreen
 import io.github.project.vault.ui.theme.AppVaultTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        handleOAuthIntent(intent)
 
         setContent {
             AppVaultTheme {
@@ -92,6 +99,28 @@ class MainActivity : ComponentActivity() {
                         composable(Screen.Settings.route) {
                             SettingsScreen(backupRepository = backupRepository)
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleOAuthIntent(intent)
+    }
+
+    private fun handleOAuthIntent(intent: Intent?) {
+        val uri = intent?.data ?: return
+        if (uri.scheme == "io.github.project.vault" && uri.host == "oauth2redirect") {
+            val code = uri.getQueryParameter("code")
+            if (!code.isNullOrBlank()) {
+                lifecycleScope.launch {
+                    val success = OAuthManager.handleAuthCode(applicationContext, code)
+                    if (success) {
+                        Toast.makeText(applicationContext, "Successfully connected to Google Drive!", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(applicationContext, "Google authentication failed", Toast.LENGTH_SHORT).show()
                     }
                 }
             }

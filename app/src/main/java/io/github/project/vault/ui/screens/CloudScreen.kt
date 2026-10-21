@@ -1,8 +1,5 @@
 package io.github.project.vault.ui.screens
 
-import android.app.Activity
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,8 +21,9 @@ import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -56,12 +54,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.common.api.ApiException
-import com.google.android.gms.common.api.Scope
 import io.github.project.vault.core.cloud.CloudBackupItem
 import io.github.project.vault.core.cloud.GoogleDriveManager
+import io.github.project.vault.core.cloud.OAuthManager
 import io.github.project.vault.data.repository.BackupRepository
 import io.github.project.vault.ui.components.StatusBadge
 import kotlinx.coroutines.launch
@@ -81,8 +76,8 @@ fun CloudScreen(
     var isConnected by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(true) }
     var cloudBackups by remember { mutableStateOf<List<CloudBackupItem>>(emptyList()) }
-    var showManualDialog by remember { mutableStateOf(false) }
-    var manualTokenInput by remember { mutableStateOf("") }
+    var showCustomClientDialog by remember { mutableStateOf(false) }
+    var customClientIdInput by remember { mutableStateOf("") }
 
     suspend fun refreshCloudState() {
         isLoading = true
@@ -95,49 +90,6 @@ fun CloudScreen(
 
     LaunchedEffect(Unit) {
         refreshCloudState()
-    }
-
-    // Interactive 1-Tap Google Sign-In Activity Launcher
-    val googleSignInLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-            try {
-                val account = task.getResult(ApiException::class.java)
-                val androidAccount = account?.account
-                if (androidAccount != null) {
-                    scope.launch {
-                        isLoading = true
-                        val token = driveManager.fetchTokenFromGoogleAccount(androidAccount)
-                        if (token != null) {
-                            driveManager.saveAccount(account.email ?: androidAccount.name, account.displayName, token)
-                            refreshCloudState()
-                            snackbarHostState.showSnackbar("Connected to Google Drive as ${account.email}")
-                        } else {
-                            // Fallback if token utility requires web auth
-                            driveManager.saveAccount(account.email ?: androidAccount.name, account.displayName, account.idToken ?: "connected")
-                            refreshCloudState()
-                            snackbarHostState.showSnackbar("Connected as ${account.email}")
-                        }
-                        isLoading = false
-                    }
-                }
-            } catch (e: Exception) {
-                scope.launch {
-                    snackbarHostState.showSnackbar("Google Sign-In: ${e.localizedMessage ?: "Failed"}")
-                }
-            }
-        }
-    }
-
-    fun launchInteractiveGoogleSignIn() {
-        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestEmail()
-            .requestScopes(Scope("https://www.googleapis.com/auth/drive.appdata"))
-            .build()
-        val client = GoogleSignIn.getClient(context, gso)
-        googleSignInLauncher.launch(client.signInIntent)
     }
 
     Scaffold(
@@ -233,7 +185,7 @@ fun CloudScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        text = "Encrypted backups are saved inside your private, isolated Google Drive AppData folder. Other apps and personal files remain completely separated.",
+                        text = "Universal Browser Authentication: Works smoothly on Vanilla AOSP ROMs without Google Play Services, LineageOS, GrapheneOS, or stock devices. Zero token copy-pasting required.",
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isConnected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -241,9 +193,11 @@ fun CloudScreen(
                     Spacer(modifier = Modifier.height(18.dp))
 
                     if (!isConnected) {
-                        // 1-Tap Google Sign-In Button
+                        // Universal In-Browser OAuth Button
                         Button(
-                            onClick = { launchInteractiveGoogleSignIn() },
+                            onClick = {
+                                OAuthManager.startBrowserAuth(context, customClientIdInput.ifBlank { null })
+                            },
                             shape = RoundedCornerShape(14.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary
@@ -252,31 +206,29 @@ fun CloudScreen(
                                 .fillMaxWidth()
                                 .height(50.dp)
                         ) {
-                            Icon(Icons.Default.CloudDone, contentDescription = null)
+                            Icon(Icons.Default.OpenInBrowser, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Sign in with Google",
+                                text = "Sign in via Browser (Universal)",
                                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
                             )
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Optional custom credentials for microG or deGoogled ROMs
+                        // Custom Client ID toggle for power users
                         TextButton(
-                            onClick = { showManualDialog = true },
+                            onClick = { showCustomClientDialog = true },
                             modifier = Modifier.align(Alignment.CenterHorizontally)
                         ) {
-                            Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Advanced / Custom Token Login", style = MaterialTheme.typography.labelMedium)
+                            Text("Configure Custom Client ID (Optional)", style = MaterialTheme.typography.labelMedium)
                         }
                     } else {
                         OutlinedButton(
                             onClick = {
                                 scope.launch {
-                                    val client = GoogleSignIn.getClient(context, GoogleSignInOptions.DEFAULT_SIGN_IN)
-                                    client.signOut()
                                     driveManager.disconnect()
                                     refreshCloudState()
                                     snackbarHostState.showSnackbar("Signed out of Google Drive")
@@ -392,39 +344,33 @@ fun CloudScreen(
         }
     }
 
-    // Manual Dialog Fallback
-    if (showManualDialog) {
+    // Custom Client ID dialog for advanced users
+    if (showCustomClientDialog) {
         androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showManualDialog = false },
-            title = { Text("Custom Access Token") },
+            onDismissRequest = { showCustomClientDialog = false },
+            title = { Text("Custom OAuth Client ID") },
             text = {
                 Column {
-                    Text("For deGoogled ROMs (microG / GrapheneOS), you can paste a custom OAuth token:")
+                    Text("By default, FrostBackup uses its built-in open-source client ID. If you have your own Google Cloud Console client ID, paste it below:")
                     Spacer(modifier = Modifier.height(12.dp))
                     OutlinedTextField(
-                        value = manualTokenInput,
-                        onValueChange = { manualTokenInput = it },
-                        label = { Text("Access Token") },
+                        value = customClientIdInput,
+                        onValueChange = { customClientIdInput = it },
+                        label = { Text("Client ID (.apps.googleusercontent.com)") },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
             },
             confirmButton = {
                 Button(
-                    onClick = {
-                        if (manualTokenInput.isNotBlank()) {
-                            driveManager.saveAccount("custom-user@drive", "Custom Account", manualTokenInput.trim())
-                            showManualDialog = false
-                            scope.launch { refreshCloudState() }
-                        }
-                    }
+                    onClick = { showCustomClientDialog = false }
                 ) {
                     Text("Save")
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { showManualDialog = false }) {
-                    Text("Cancel")
+                OutlinedButton(onClick = { showCustomClientDialog = false }) {
+                    Text("Done")
                 }
             }
         )
