@@ -14,7 +14,7 @@ class BackupRepository(private val context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
 
     fun getBackupDirectory(): File {
-        val dir = File(Environment.getExternalStorageDirectory(), "FrostBackup/Backups")
+        val dir = File("/sdcard/FrostBackup/Backups")
         return dir
     }
 
@@ -36,12 +36,18 @@ class BackupRepository(private val context: Context) {
     }
 
     private suspend fun parseMetadataFromArchive(file: File): BackupMetadata? {
+        val path = if (file.absolutePath.startsWith("/storage/emulated/0")) {
+            file.absolutePath.replaceFirst("/storage/emulated/0", "/sdcard")
+        } else {
+            file.absolutePath
+        }
+
         val result = RootShell.execute(
-            "tar -xOf ${file.absolutePath} ./metadata.json 2>/dev/null"
+            "tar -xOf $path ./metadata.json 2>/dev/null || tar -xOf $path metadata.json 2>/dev/null"
         )
         return if (result.isSuccess && result.stdout.isNotBlank()) {
             try {
-                val sizeResult = RootShell.execute("stat -c %s ${file.absolutePath} 2>/dev/null || wc -c < ${file.absolutePath}")
+                val sizeResult = RootShell.execute("stat -c %s $path 2>/dev/null || wc -c < $path")
                 val sizeBytes = sizeResult.stdout.trim().toLongOrNull() ?: file.length()
                 json.decodeFromString<BackupMetadata>(result.stdout).copy(
                     archiveSizeBytes = sizeBytes,
@@ -51,20 +57,23 @@ class BackupRepository(private val context: Context) {
                 null
             }
         } else {
-            val sizeResult = RootShell.execute("stat -c %s ${file.absolutePath} 2>/dev/null || wc -c < ${file.absolutePath}")
+            // Check if file is actually an encrypted archive or if it's an unencrypted tar
+            val isTar = RootShell.execute("tar -tf $path 2>/dev/null | head -n1").stdout.isNotBlank()
+            val isEncrypted = !isTar
+
+            val sizeResult = RootShell.execute("stat -c %s $path 2>/dev/null || wc -c < $path")
             val sizeBytes = sizeResult.stdout.trim().toLongOrNull() ?: file.length()
-            val parts = file.nameWithoutExtension.split("_")
-            val pkg = parts.getOrNull(0) ?: file.nameWithoutExtension
-            val timestamp = parts.getOrNull(1)?.toLongOrNull() ?: System.currentTimeMillis()
+            val name = file.nameWithoutExtension
+            val appTitle = name.substringBeforeLast("_").replace("_", " ").replaceFirstChar { it.uppercase() }
             BackupMetadata(
-                packageName = pkg,
-                appName = pkg,
+                packageName = name.substringBeforeLast("_").ifBlank { name },
+                appName = appTitle,
                 versionName = "Unknown",
                 versionCode = 0,
                 targetSdk = 34,
                 originalUid = 0,
-                backupTimestamp = timestamp,
-                isEncrypted = true,
+                backupTimestamp = file.lastModified(),
+                isEncrypted = isEncrypted,
                 archiveFileName = file.name,
                 archiveSizeBytes = sizeBytes
             )

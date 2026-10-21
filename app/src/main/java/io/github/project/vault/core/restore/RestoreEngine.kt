@@ -28,6 +28,12 @@ class RestoreEngine(private val context: Context) {
         val stagingPath = "/data/local/tmp/vault_restore_$timestamp"
         var decryptedTempFile: File? = null
 
+        val safeArchiveFile = if (archiveFile.absolutePath.startsWith("/storage/emulated/0")) {
+            File(archiveFile.absolutePath.replaceFirst("/storage/emulated/0", "/sdcard"))
+        } else {
+            archiveFile
+        }
+
         try {
             onProgress(RestoreProgress("Preparing restore environment…", 0.05f, ""))
             RootShell.execute("mkdir -p $stagingPath")
@@ -36,11 +42,11 @@ class RestoreEngine(private val context: Context) {
             val effectiveArchiveFile = if (!password.isNullOrBlank()) {
                 onProgress(RestoreProgress("Decrypting backup archive…", 0.15f, ""))
                 val tempDecrypted = File(context.cacheDir, "decrypted_$timestamp.tar")
-                CryptoManager.decryptFile(archiveFile, tempDecrypted, password)
+                CryptoManager.decryptFile(safeArchiveFile, tempDecrypted, password)
                 decryptedTempFile = tempDecrypted
                 tempDecrypted
             } else {
-                archiveFile
+                safeArchiveFile
             }
 
             // 2. Unpack archive to staging directory
@@ -64,9 +70,33 @@ class RestoreEngine(private val context: Context) {
             // 4. Reinstall APK if present
             if (metadata.hasApk) {
                 onProgress(RestoreProgress("Reinstalling APK packages…", 0.45f, metadata.appName))
-                val apkInstallResult = RootShell.execute("pm install -r -d -g $stagingPath/apk/*.apk")
-                if (!apkInstallResult.isSuccess) {
-                    return@withContext RestoreResult.Error("APK installation failed: ${apkInstallResult.stderr}")
+                val apkFilesResult = RootShell.execute("ls -1 $stagingPath/apk/*.apk 2>/dev/null")
+                if (apkFilesResult.isSuccess && apkFilesResult.stdout.isNotBlank()) {
+                    val apks = apkFilesResult.stdout.lines().map { it.trim() }.filter { it.endsWith(".apk") }
+                    if (apks.size == 1) {
+                        val apkInstallResult = RootShell.execute("pm install -r -d -g ${apks.first()}")
+                        if (!apkInstallResult.isSuccess) {
+                            return@withContext RestoreResult.Error("APK installation failed: ${apkInstallResult.stderr}")
+                        }
+                    } else if (apks.size > 1) {
+                        val sessionRes = RootShell.execute("pm install-create -r -d -g")
+                        val sessionId = Regex("""\[(\d+)\]""").find(sessionRes.stdout)?.groupValues?.get(1)
+                            ?: Regex("""(\d+)""").find(sessionRes.stdout)?.groupValues?.get(1)
+                        if (sessionId != null) {
+                            for (apkPath in apks) {
+                                val apkName = File(apkPath).name
+                                val size = RootShell.execute("stat -c %s $apkPath 2>/dev/null || wc -c < $apkPath").stdout.trim()
+                                RootShell.execute("pm install-write -S $size $sessionId $apkName $apkPath")
+                            }
+                            val commitRes = RootShell.execute("pm install-commit $sessionId")
+                            if (!commitRes.isSuccess) {
+                                return@withContext RestoreResult.Error("Split APK install failed: ${commitRes.stderr}")
+                            }
+                        } else {
+                            val baseApk = apks.firstOrNull { it.endsWith("base.apk") } ?: apks.first()
+                            RootShell.execute("pm install -r -d -g $baseApk")
+                        }
+                    }
                 }
             }
 
