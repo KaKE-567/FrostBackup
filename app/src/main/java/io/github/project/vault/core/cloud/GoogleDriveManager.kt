@@ -324,7 +324,7 @@ class GoogleDriveManager(private val context: Context) : CloudProvider {
                             val name = f.getString("name")
                             val size = f.optLong("size", 0L)
                             val modified = System.currentTimeMillis()
-                            val pkg = name.substringBeforeLast("_")
+                            val pkg = name.removeSuffix(".vault")
                             items.add(CloudBackupItem(id, name, size, modified, pkg))
                         }
                     }
@@ -353,7 +353,7 @@ class GoogleDriveManager(private val context: Context) : CloudProvider {
                                 val name = f.getString("name")
                                 val size = f.optLong("size", 0L)
                                 val modified = System.currentTimeMillis()
-                                val pkg = name.substringBeforeLast("_")
+                                val pkg = name.removeSuffix(".vault")
                                 items.add(CloudBackupItem(id, name, size, modified, pkg))
                             }
                         }

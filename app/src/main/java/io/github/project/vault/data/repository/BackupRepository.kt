@@ -83,7 +83,9 @@ class BackupRepository(private val context: Context) {
         val metaResult = RootShell.execute("tar -xOf ${archiveFile.absolutePath} ./metadata.json 2>/dev/null")
         val metaString = if (metaResult.isSuccess && metaResult.stdout.isNotBlank()) metaResult.stdout else "{}"
 
-        val cacheStaging = File(context.cacheDir, "upload_$archiveFileName")
+        val stagingDir = File(context.cacheDir, "cloud_staging")
+        stagingDir.mkdirs()
+        val cacheStaging = File(stagingDir, archiveFileName)
         try {
             RootShell.execute("cp -p ${archiveFile.absolutePath} ${cacheStaging.absolutePath}")
             RootShell.execute("chmod 666 ${cacheStaging.absolutePath}")
@@ -94,7 +96,7 @@ class BackupRepository(private val context: Context) {
         } catch (e: Exception) {
             false
         } finally {
-            RootShell.execute("rm -f ${cacheStaging.absolutePath}")
+            RootShell.execute("rm -rf ${stagingDir.absolutePath}")
         }
     }
 }

@@ -15,6 +15,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class BackupEngine(private val context: Context) {
     private val json = Json { prettyPrint = true }
@@ -98,7 +101,13 @@ class BackupEngine(private val context: Context) {
             } else emptyList()
 
             // 7. Write Metadata JSON
-            val baseFileName = "${app.packageName}_$timestamp.vault"
+            val cleanAppName = app.appName.trim().lowercase()
+                .replace("\\s+".toRegex(), "_")
+                .replace("[^a-z0-9_-]".toRegex(), "")
+                .ifBlank { app.packageName.substringAfterLast(".").lowercase() }
+
+            val dateFormatted = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.getDefault()).format(Date(timestamp))
+            val baseFileName = "${cleanAppName}_$dateFormatted.vault"
             val finalArchiveFile = File(destinationDir, baseFileName)
 
             val metadata = BackupMetadata(
@@ -128,7 +137,7 @@ class BackupEngine(private val context: Context) {
             // 8. Package staging folder into bundle inside app cache staging area
             onProgress(BackupProgress("Compressing backup package…", 0.85f, app.appName))
             val rawBundlePath = "$stagingPath/bundle.tar"
-            val finalBundlePath = "$stagingPath/final.vault"
+            val finalBundlePath = "$stagingPath/$baseFileName"
 
             val tarResult = RootShell.execute("tar -cpf $rawBundlePath -C $payloadPath .")
             if (!tarResult.isSuccess) {
