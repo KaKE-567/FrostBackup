@@ -245,6 +245,15 @@ fun AppListScreen(
 
                 // Filter Carousel Row
                 item(key = "filter_chips") {
+                    val chipColors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f),
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        selectedLeadingIconColor = MaterialTheme.colorScheme.primary,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.40f),
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        iconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -258,9 +267,7 @@ fun AppListScreen(
                             leadingIcon = if (selectedFilter == AppFilter.USER) {
                                 { Icon(Icons.Default.Check, contentDescription = null) }
                             } else null,
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-                            )
+                            colors = chipColors
                         )
 
                         FilterChip(
@@ -270,9 +277,7 @@ fun AppListScreen(
                             leadingIcon = if (selectedFilter == AppFilter.BACKED_UP) {
                                 { Icon(Icons.Default.Check, contentDescription = null) }
                             } else null,
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-                            )
+                            colors = chipColors
                         )
 
                         FilterChip(
@@ -282,9 +287,7 @@ fun AppListScreen(
                             leadingIcon = if (selectedFilter == AppFilter.SYSTEM) {
                                 { Icon(Icons.Default.Check, contentDescription = null) }
                             } else null,
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-                            )
+                            colors = chipColors
                         )
 
                         FilterChip(
@@ -294,9 +297,7 @@ fun AppListScreen(
                             leadingIcon = if (selectedFilter == AppFilter.ALL) {
                                 { Icon(Icons.Default.Check, contentDescription = null) }
                             } else null,
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-                            )
+                            colors = chipColors
                         )
                     }
                 }

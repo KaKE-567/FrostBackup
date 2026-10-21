@@ -337,7 +337,7 @@ fun CloudScreen(
                                         Text(
                                             text = String.format("%.1f MB", item.sizeBytes / (1024.0 * 1024.0)),
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.outline
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
 

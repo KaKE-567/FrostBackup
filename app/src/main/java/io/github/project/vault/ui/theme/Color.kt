@@ -27,13 +27,19 @@ val DarkEmeraldOnPrimary = Color(0xFF003828)
 val DarkEmeraldPrimaryContainer = Color(0xFF00513B)
 val DarkEmeraldOnPrimaryContainer = Color(0xFF88F8CD)
 
+val DarkMintSecondary = Color(0xFFB3CCBF)
+val DarkMintOnSecondary = Color(0xFF1E352B)
+val DarkMintSecondaryContainer = Color(0xFF2E4238)
+val DarkMintOnSecondaryContainer = Color(0xFFCEE9DA)
+
 val DarkSlateBackground = Color(0xFF101513)
 val DarkSlateOnBackground = Color(0xFFE1E5E2)
 val DarkSlateSurface = Color(0xFF171E1A)
 val DarkSlateOnSurface = Color(0xFFE1E5E2)
 val DarkSlateSurfaceVariant = Color(0xFF222B26)
 val DarkSlateOnSurfaceVariant = Color(0xFFBCCBC3)
-val DarkSlateOutline = Color(0xFF384640)
+val DarkSlateOutline = Color(0xFF889990)
+val DarkSlateOutlineVariant = Color(0xFF384640)
 
 // Frosted Glass Constants
 val GlassDarkSurface = Color(0xD8171E1A) // 85% alpha dark surface

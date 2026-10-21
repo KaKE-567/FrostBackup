@@ -15,17 +15,18 @@ private val DarkColorScheme = darkColorScheme(
     onPrimary = DarkEmeraldOnPrimary,
     primaryContainer = DarkEmeraldPrimaryContainer,
     onPrimaryContainer = DarkEmeraldOnPrimaryContainer,
-    secondary = MintSecondary,
-    onSecondary = MintOnSecondary,
-    secondaryContainer = MintSecondaryContainer,
-    onSecondaryContainer = MintOnSecondaryContainer,
+    secondary = DarkMintSecondary,
+    onSecondary = DarkMintOnSecondary,
+    secondaryContainer = DarkMintSecondaryContainer,
+    onSecondaryContainer = DarkMintOnSecondaryContainer,
     background = DarkSlateBackground,
     onBackground = DarkSlateOnBackground,
     surface = DarkSlateSurface,
     onSurface = DarkSlateOnSurface,
     surfaceVariant = DarkSlateSurfaceVariant,
     onSurfaceVariant = DarkSlateOnSurfaceVariant,
-    outline = DarkSlateOutline
+    outline = DarkSlateOutline,
+    outlineVariant = DarkSlateOutlineVariant
 )
 
 private val LightColorScheme = lightColorScheme(

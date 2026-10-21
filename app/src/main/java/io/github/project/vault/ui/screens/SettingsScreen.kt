@@ -309,7 +309,7 @@ fun SettingsScreen(
                         Text(
                             text = currentStoragePath,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
                         availableTargets.forEach { target ->
@@ -363,7 +363,7 @@ fun SettingsScreen(
                                     Text(
                                         text = target.backupDirectoryPath,
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.outline,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -371,7 +371,7 @@ fun SettingsScreen(
                                         Text(
                                             text = "${target.formattedFreeSpace} free of ${target.formattedTotalSpace}",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = MaterialTheme.colorScheme.primary
                                         )
                                     }
                                 }

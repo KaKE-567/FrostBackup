@@ -484,7 +484,7 @@ fun BackupArchiveCard(
                     Text(
                         text = "$formattedDate • $sizeMb",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 

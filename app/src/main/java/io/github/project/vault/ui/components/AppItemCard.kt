@@ -141,7 +141,7 @@ fun AppItemCard(
                         Text(
                             text = if (app.appSizeFormatted.isNotEmpty()) "v${app.versionName} • ${app.appSizeFormatted}" else "v${app.versionName}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false)
@@ -211,7 +211,7 @@ fun AppItemCard(
                         Text(
                             text = "UID: ${app.uid}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
                         Button(

@@ -82,7 +82,7 @@ fun BackupProgressDialog(
                 Text(
                     text = "${(progressFraction * 100).toInt()}%",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
