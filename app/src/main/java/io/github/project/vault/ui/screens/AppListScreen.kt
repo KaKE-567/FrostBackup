@@ -25,7 +25,11 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -83,11 +87,13 @@ fun AppListScreen(
     var activeProgress by remember { mutableStateOf<BackupProgress?>(null) }
 
     suspend fun reloadApps() {
-        isLoading = true
+        isLoading = apps.isEmpty()
         isRooted = RootShell.isRootAvailable()
-        val allInstalled = appRepository.getInstalledApps(includeSystem = true)
-        apps = allInstalled
+        val fastList = appRepository.getInstalledAppsFast(includeSystem = true)
+        apps = fastList
         isLoading = false
+        val enriched = appRepository.enrichWithBackupStatus(fastList)
+        apps = enriched
     }
 
     LaunchedEffect(Unit) {
@@ -109,7 +115,10 @@ fun AppListScreen(
         }
     }
 
+    val outlineColor = MaterialTheme.colorScheme.outline
+
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = {
@@ -127,6 +136,17 @@ fun AppListScreen(
                             contentColor = if (isRooted) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
                         )
                     }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.80f)
+                ),
+                modifier = Modifier.drawBehind {
+                    drawLine(
+                        color = outlineColor.copy(alpha = 0.15f),
+                        start = Offset(0f, size.height),
+                        end = Offset(size.width, size.height),
+                        strokeWidth = 1.dp.toPx()
+                    )
                 },
                 actions = {
                     IconButton(onClick = { scope.launch { reloadApps() } }) {
@@ -155,7 +175,7 @@ fun AppListScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Search Input
+            // Search Input (Frosted)
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
@@ -168,6 +188,12 @@ fun AppListScreen(
                         }
                     }
                 },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.70f),
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                ),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()

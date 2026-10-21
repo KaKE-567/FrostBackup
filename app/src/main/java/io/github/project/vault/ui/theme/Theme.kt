@@ -15,10 +15,17 @@ private val DarkColorScheme = darkColorScheme(
     onPrimary = DarkEmeraldOnPrimary,
     primaryContainer = DarkEmeraldPrimaryContainer,
     onPrimaryContainer = DarkEmeraldOnPrimaryContainer,
+    secondary = MintSecondary,
+    onSecondary = MintOnSecondary,
+    secondaryContainer = MintSecondaryContainer,
+    onSecondaryContainer = MintOnSecondaryContainer,
     background = DarkSlateBackground,
     onBackground = DarkSlateOnBackground,
     surface = DarkSlateSurface,
-    onSurface = DarkSlateOnSurface
+    onSurface = DarkSlateOnSurface,
+    surfaceVariant = DarkSlateSurfaceVariant,
+    onSurfaceVariant = DarkSlateOnSurfaceVariant,
+    outline = DarkSlateOutline
 )
 
 private val LightColorScheme = lightColorScheme(
@@ -33,15 +40,24 @@ private val LightColorScheme = lightColorScheme(
     background = SlateBackground,
     onBackground = SlateOnBackground,
     surface = SlateSurface,
-    onSurface = SlateOnSurface
+    onSurface = SlateOnSurface,
+    surfaceVariant = SlateSurfaceVariant,
+    onSurfaceVariant = SlateOnSurfaceVariant,
+    outline = SlateOutline
 )
 
 @Composable
 fun AppVaultTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
+    val darkTheme = when (themeMode) {
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    }
+
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current

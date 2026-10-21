@@ -9,9 +9,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 class BackupRepository(private val context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
+
+    companion object {
+        private val metadataCache = ConcurrentHashMap<String, BackupMetadata>()
+
+        fun invalidateCache() {
+            metadataCache.clear()
+        }
+    }
 
     fun getBackupDirectory(): File {
         val dir = File("/sdcard/FrostBackup/Backups")
@@ -31,7 +40,10 @@ class BackupRepository(private val context: Context) {
         val filePaths = listResult.stdout.lines().map { it.trim() }.filter { it.endsWith(".vault") }
         filePaths.mapNotNull { path ->
             val file = File(path)
-            parseMetadataFromArchive(file)
+            val cacheKey = "${file.absolutePath}_${file.length()}"
+            metadataCache[cacheKey] ?: parseMetadataFromArchive(file)?.also {
+                metadataCache[cacheKey] = it
+            }
         }.sortedByDescending { it.backupTimestamp }
     }
 

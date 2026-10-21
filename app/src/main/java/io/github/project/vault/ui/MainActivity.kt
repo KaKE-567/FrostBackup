@@ -9,13 +9,20 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -25,12 +32,15 @@ import androidx.navigation.compose.rememberNavController
 import io.github.project.vault.core.cloud.OAuthManager
 import io.github.project.vault.data.repository.AppRepository
 import io.github.project.vault.data.repository.BackupRepository
+import io.github.project.vault.ui.components.FrostedBackground
 import io.github.project.vault.ui.navigation.Screen
 import io.github.project.vault.ui.screens.AppListScreen
 import io.github.project.vault.ui.screens.CloudScreen
 import io.github.project.vault.ui.screens.RestoreScreen
 import io.github.project.vault.ui.screens.SettingsScreen
 import io.github.project.vault.ui.theme.AppVaultTheme
+import io.github.project.vault.ui.theme.ThemeMode
+import io.github.project.vault.ui.theme.ThemePreference
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -41,63 +51,89 @@ class MainActivity : ComponentActivity() {
         handleOAuthIntent(intent)
 
         setContent {
-            AppVaultTheme {
-                val navController = rememberNavController()
-                val backupRepository = remember { BackupRepository(applicationContext) }
-                val appRepository = remember { AppRepository(applicationContext, backupRepository) }
+            var currentThemeMode by remember {
+                mutableStateOf(ThemePreference.getThemeMode(applicationContext))
+            }
 
-                val screens = listOf(
-                    Screen.Apps,
-                    Screen.Restore,
-                    Screen.Cloud,
-                    Screen.Settings
-                )
+            AppVaultTheme(themeMode = currentThemeMode) {
+                FrostedBackground {
+                    val navController = rememberNavController()
+                    val backupRepository = remember { BackupRepository(applicationContext) }
+                    val appRepository = remember { AppRepository(applicationContext, backupRepository) }
 
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentRoute = navBackStackEntry?.destination?.route
+                    val screens = listOf(
+                        Screen.Apps,
+                        Screen.Restore,
+                        Screen.Cloud,
+                        Screen.Settings
+                    )
 
-                Scaffold(
-                    bottomBar = {
-                        NavigationBar {
-                            screens.forEach { screen ->
-                                val selected = currentRoute == screen.route
-                                NavigationBarItem(
-                                    selected = selected,
-                                    onClick = {
-                                        if (currentRoute != screen.route) {
-                                            navController.navigate(screen.route) {
-                                                popUpTo(navController.graph.findStartDestination().id) {
-                                                    saveState = true
+                    val navBackStackEntry by navController.currentBackStackEntryAsState()
+                    val currentRoute = navBackStackEntry?.destination?.route
+
+                    Scaffold(
+                        containerColor = Color.Transparent,
+                        bottomBar = {
+                            val outlineColor = MaterialTheme.colorScheme.outline
+                            NavigationBar(
+                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                tonalElevation = 0.dp,
+                                modifier = Modifier.drawBehind {
+                                    drawLine(
+                                        color = outlineColor.copy(alpha = 0.18f),
+                                        start = Offset(0f, 0f),
+                                        end = Offset(size.width, 0f),
+                                        strokeWidth = 1.dp.toPx()
+                                    )
+                                }
+                            ) {
+                                screens.forEach { screen ->
+                                    val selected = currentRoute == screen.route
+                                    NavigationBarItem(
+                                        selected = selected,
+                                        onClick = {
+                                            if (currentRoute != screen.route) {
+                                                navController.navigate(screen.route) {
+                                                    popUpTo(navController.graph.findStartDestination().id) {
+                                                        saveState = true
+                                                    }
+                                                    launchSingleTop = true
+                                                    restoreState = true
                                                 }
-                                                launchSingleTop = true
-                                                restoreState = true
                                             }
-                                        }
-                                    },
-                                    icon = { Icon(screen.icon, contentDescription = screen.title) },
-                                    label = { Text(screen.title) }
+                                        },
+                                        icon = { Icon(screen.icon, contentDescription = screen.title) },
+                                        label = { Text(screen.title) }
+                                    )
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    ) { innerPadding ->
+                        NavHost(
+                            navController = navController,
+                            startDestination = Screen.Apps.route,
+                            modifier = Modifier.padding(innerPadding)
+                        ) {
+                            composable(Screen.Apps.route) {
+                                AppListScreen(appRepository = appRepository, backupRepository = backupRepository)
+                            }
+                            composable(Screen.Restore.route) {
+                                RestoreScreen(backupRepository = backupRepository)
+                            }
+                            composable(Screen.Cloud.route) {
+                                CloudScreen(backupRepository = backupRepository)
+                            }
+                            composable(Screen.Settings.route) {
+                                SettingsScreen(
+                                    backupRepository = backupRepository,
+                                    currentThemeMode = currentThemeMode,
+                                    onThemeChanged = { newMode ->
+                                        currentThemeMode = newMode
+                                        ThemePreference.setThemeMode(applicationContext, newMode)
+                                    }
                                 )
                             }
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize()
-                ) { innerPadding ->
-                    NavHost(
-                        navController = navController,
-                        startDestination = Screen.Apps.route,
-                        modifier = Modifier.padding(innerPadding)
-                    ) {
-                        composable(Screen.Apps.route) {
-                            AppListScreen(appRepository = appRepository, backupRepository = backupRepository)
-                        }
-                        composable(Screen.Restore.route) {
-                            RestoreScreen(backupRepository = backupRepository)
-                        }
-                        composable(Screen.Cloud.route) {
-                            CloudScreen(backupRepository = backupRepository)
-                        }
-                        composable(Screen.Settings.route) {
-                            SettingsScreen(backupRepository = backupRepository)
                         }
                     }
                 }

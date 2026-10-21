@@ -16,7 +16,7 @@ class AppRepository(
 ) {
     private val packageManager: PackageManager = context.packageManager
 
-    suspend fun getInstalledApps(includeSystem: Boolean = false): List<AppInfo> = withContext(Dispatchers.IO) {
+    suspend fun getInstalledAppsFast(includeSystem: Boolean = false): List<AppInfo> = withContext(Dispatchers.IO) {
         val flags = PackageManager.GET_META_DATA
         val installedPackages = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             packageManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(flags.toLong()))
@@ -24,8 +24,6 @@ class AppRepository(
             @Suppress("DEPRECATION")
             packageManager.getInstalledPackages(flags)
         }
-
-        val backupMap = backupRepository.getLocalBackups().associateBy { it.packageName }
 
         installedPackages.mapNotNull { packageInfo ->
             val appInfo = packageInfo.applicationInfo ?: return@mapNotNull null
@@ -45,7 +43,6 @@ class AppRepository(
             }
 
             val splitDirs = appInfo.splitSourceDirs?.toList() ?: emptyList()
-            val localBackup = backupMap[packageInfo.packageName]
 
             // Approximate app size
             val apkSize = File(appInfo.sourceDir).length()
@@ -62,10 +59,30 @@ class AppRepository(
                 splitSourceDirs = splitDirs,
                 dataDir = appInfo.dataDir,
                 appSizeFormatted = sizeFormatted,
-                hasBackup = localBackup != null,
-                lastBackupTimestamp = localBackup?.backupTimestamp
+                hasBackup = false,
+                lastBackupTimestamp = null
             )
         }.sortedBy { it.appName.lowercase() }
+    }
+
+    suspend fun enrichWithBackupStatus(apps: List<AppInfo>): List<AppInfo> = withContext(Dispatchers.IO) {
+        val backupMap = backupRepository.getLocalBackups().associateBy { it.packageName }
+        apps.map { app ->
+            val backup = backupMap[app.packageName]
+            if (backup != null) {
+                app.copy(
+                    hasBackup = true,
+                    lastBackupTimestamp = backup.backupTimestamp
+                )
+            } else {
+                app
+            }
+        }
+    }
+
+    suspend fun getInstalledApps(includeSystem: Boolean = false): List<AppInfo> = withContext(Dispatchers.IO) {
+        val fastList = getInstalledAppsFast(includeSystem)
+        enrichWithBackupStatus(fastList)
     }
 
     private fun formatFileSize(bytes: Long): String {
