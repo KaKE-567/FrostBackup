@@ -1,7 +1,9 @@
 package io.github.project.vault.core.cloud
 
+import android.accounts.Account
 import android.content.Context
 import android.content.SharedPreferences
+import com.google.android.gms.auth.GoogleAuthUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -24,12 +26,35 @@ class GoogleDriveManager(private val context: Context) : CloudProvider {
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
+    var userEmail: String?
+        get() = prefs.getString("gdrive_user_email", null)
+        private set(value) = prefs.edit().putString("gdrive_user_email", value).apply()
+
+    var displayName: String?
+        get() = prefs.getString("gdrive_display_name", null)
+        private set(value) = prefs.edit().putString("gdrive_display_name", value).apply()
+
     private var accessToken: String?
         get() = prefs.getString("gdrive_access_token", null)
         set(value) = prefs.edit().putString("gdrive_access_token", value).apply()
 
-    fun setTokens(token: String) {
+    fun saveAccount(email: String, name: String?, token: String) {
+        userEmail = email
+        displayName = name
         accessToken = token
+    }
+
+    suspend fun fetchTokenFromGoogleAccount(account: Account): String? = withContext(Dispatchers.IO) {
+        try {
+            val scope = "oauth2:https://www.googleapis.com/auth/drive.appdata"
+            val token = GoogleAuthUtil.getToken(context, account, scope)
+            accessToken = token
+            userEmail = account.name
+            token
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
     }
 
     override suspend fun isConnected(): Boolean {
@@ -37,13 +62,16 @@ class GoogleDriveManager(private val context: Context) : CloudProvider {
     }
 
     override suspend fun disconnect() {
-        accessToken = null
+        prefs.edit()
+            .remove("gdrive_access_token")
+            .remove("gdrive_user_email")
+            .remove("gdrive_display_name")
+            .apply()
     }
 
     override suspend fun uploadBackup(file: File, metadataJson: String, onProgress: (Float) -> Unit): Boolean = withContext(Dispatchers.IO) {
         val token = accessToken ?: return@withContext false
         try {
-            // Step 1: Initiate resumable upload session in appDataFolder
             val initJson = JSONObject().apply {
                 put("name", file.name)
                 put("parents", org.json.JSONArray().put("appDataFolder"))
@@ -63,7 +91,6 @@ class GoogleDriveManager(private val context: Context) : CloudProvider {
 
             val uploadLocation = initResponse.header("Location") ?: return@withContext false
 
-            // Step 2: Upload the binary content
             val fileBody = file.asRequestBody("application/octet-stream".toMediaType())
             val uploadRequest = Request.Builder()
                 .url(uploadLocation)
@@ -139,10 +166,7 @@ class GoogleDriveManager(private val context: Context) : CloudProvider {
                 val id = f.getString("id")
                 val name = f.getString("name")
                 val size = f.optLong("size", 0L)
-                val modified = System.currentTimeMillis() // parsed from modifiedTime if available
-                val desc = f.optString("description", "")
-
-                // Extract package name from name pattern: com.example.app_timestamp.vault
+                val modified = System.currentTimeMillis()
                 val pkg = name.substringBeforeLast("_")
                 items.add(CloudBackupItem(id, name, size, modified, pkg))
             }
