@@ -7,7 +7,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -163,36 +165,46 @@ class MainActivity : ComponentActivity() {
                                         val toIndex = getScreenIndex(targetState.destination.route)
                                         val isForward = toIndex >= fromIndex
                                         slideInHorizontally(
-                                            initialOffsetX = { if (isForward) it / 3 else -it / 3 },
-                                            animationSpec = tween(220, easing = FastOutSlowInEasing)
-                                        ) + fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing))
+                                            initialOffsetX = { if (isForward) 70 else -70 },
+                                            animationSpec = tween(120, easing = LinearOutSlowInEasing)
+                                        ) + fadeIn(
+                                            initialAlpha = 0.45f,
+                                            animationSpec = tween(120, easing = LinearOutSlowInEasing)
+                                        )
                                     },
                                     exitTransition = {
                                         val fromIndex = getScreenIndex(initialState.destination.route)
                                         val toIndex = getScreenIndex(targetState.destination.route)
                                         val isForward = toIndex >= fromIndex
                                         slideOutHorizontally(
-                                            targetOffsetX = { if (isForward) -it / 3 else it / 3 },
-                                            animationSpec = tween(220, easing = FastOutSlowInEasing)
-                                        ) + fadeOut(animationSpec = tween(220, easing = FastOutSlowInEasing))
+                                            targetOffsetX = { if (isForward) -70 else 70 },
+                                            animationSpec = tween(90, easing = FastOutLinearInEasing)
+                                        ) + fadeOut(
+                                            animationSpec = tween(90, easing = FastOutLinearInEasing)
+                                        )
                                     },
                                     popEnterTransition = {
                                         val fromIndex = getScreenIndex(initialState.destination.route)
                                         val toIndex = getScreenIndex(targetState.destination.route)
                                         val isForward = toIndex >= fromIndex
                                         slideInHorizontally(
-                                            initialOffsetX = { if (isForward) it / 3 else -it / 3 },
-                                            animationSpec = tween(220, easing = FastOutSlowInEasing)
-                                        ) + fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing))
+                                            initialOffsetX = { if (isForward) 70 else -70 },
+                                            animationSpec = tween(120, easing = LinearOutSlowInEasing)
+                                        ) + fadeIn(
+                                            initialAlpha = 0.45f,
+                                            animationSpec = tween(120, easing = LinearOutSlowInEasing)
+                                        )
                                     },
                                     popExitTransition = {
                                         val fromIndex = getScreenIndex(initialState.destination.route)
                                         val toIndex = getScreenIndex(targetState.destination.route)
                                         val isForward = toIndex >= fromIndex
                                         slideOutHorizontally(
-                                            targetOffsetX = { if (isForward) -it / 3 else it / 3 },
-                                            animationSpec = tween(220, easing = FastOutSlowInEasing)
-                                        ) + fadeOut(animationSpec = tween(220, easing = FastOutSlowInEasing))
+                                            targetOffsetX = { if (isForward) -70 else 70 },
+                                            animationSpec = tween(90, easing = FastOutLinearInEasing)
+                                        ) + fadeOut(
+                                            animationSpec = tween(90, easing = FastOutLinearInEasing)
+                                        )
                                     }
                                 ) {
                                     composable(Screen.Apps.route) {
