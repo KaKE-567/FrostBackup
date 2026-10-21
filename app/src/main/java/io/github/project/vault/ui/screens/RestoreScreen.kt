@@ -226,9 +226,11 @@ fun RestoreScreen(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "$totalSizeMbFormatted total on storage • /sdcard/FrostBackup",
+                                text = "$totalSizeMbFormatted total • ${backupRepository.getBackupDirectory().absolutePath}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }

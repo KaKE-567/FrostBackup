@@ -3,6 +3,7 @@ package io.github.project.vault.data.repository
 import android.content.Context
 import io.github.project.vault.core.cloud.GoogleDriveManager
 import io.github.project.vault.core.root.RootShell
+import io.github.project.vault.core.storage.StorageLocationManager
 import io.github.project.vault.data.model.BackupMetadata
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -25,8 +26,12 @@ class BackupRepository(private val context: Context) {
     }
 
     fun getBackupDirectory(): File {
-        val dir = File("/sdcard/FrostBackup/Backups")
-        return dir
+        return StorageLocationManager.getBackupDirectory(context)
+    }
+
+    fun setBackupDirectory(path: String) {
+        StorageLocationManager.setSelectedBackupDirectory(context, path)
+        invalidateCache()
     }
 
     fun getCachedBackups(): List<BackupMetadata>? = cachedBackupList

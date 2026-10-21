@@ -150,10 +150,10 @@ class MainActivity : ComponentActivity() {
                                     navController = navController,
                                     startDestination = Screen.Apps.route,
                                     modifier = Modifier.padding(innerPadding),
-                                    enterTransition = { EnterTransition.None },
-                                    exitTransition = { ExitTransition.None },
-                                    popEnterTransition = { EnterTransition.None },
-                                    popExitTransition = { ExitTransition.None }
+                                    enterTransition = { fadeIn(animationSpec = tween(150, easing = FastOutSlowInEasing)) },
+                                    exitTransition = { fadeOut(animationSpec = tween(150, easing = FastOutSlowInEasing)) },
+                                    popEnterTransition = { fadeIn(animationSpec = tween(150, easing = FastOutSlowInEasing)) },
+                                    popExitTransition = { fadeOut(animationSpec = tween(150, easing = FastOutSlowInEasing)) }
                                 ) {
                                     composable(Screen.Apps.route) {
                                         AppListScreen(appRepository = appRepository, backupRepository = backupRepository)
