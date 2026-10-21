@@ -17,6 +17,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 class GoogleDriveManager(private val context: Context) : CloudProvider {
@@ -45,6 +46,8 @@ class GoogleDriveManager(private val context: Context) : CloudProvider {
         get() = prefs.getString("gdrive_refresh_token", null)
         private set(value) = prefs.edit().putString("gdrive_refresh_token", value).apply()
 
+    private var cachedFolderId: String? = null
+
     fun saveAccount(email: String, name: String?, token: String, refreshTok: String? = null) {
         userEmail = email
         displayName = name
@@ -56,7 +59,7 @@ class GoogleDriveManager(private val context: Context) : CloudProvider {
 
     suspend fun fetchTokenFromGoogleAccount(account: Account): String? = withContext(Dispatchers.IO) {
         try {
-            val scope = "oauth2:https://www.googleapis.com/auth/drive.appdata"
+            val scope = "oauth2:https://www.googleapis.com/auth/drive.file"
             val token = GoogleAuthUtil.getToken(context, account, scope)
             accessToken = token
             userEmail = account.name
@@ -72,6 +75,7 @@ class GoogleDriveManager(private val context: Context) : CloudProvider {
     }
 
     override suspend fun disconnect() {
+        cachedFolderId = null
         prefs.edit()
             .remove("gdrive_access_token")
             .remove("gdrive_refresh_token")
@@ -146,6 +150,62 @@ class GoogleDriveManager(private val context: Context) : CloudProvider {
         response
     }
 
+    /**
+     * Finds or creates a visible 'FrostBackup' folder in the user's main Google Drive (My Drive).
+     */
+    suspend fun getOrCreateBackupFolder(): String? = withContext(Dispatchers.IO) {
+        cachedFolderId?.let { return@withContext it }
+        try {
+            val query = "name = 'FrostBackup' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+            val searchUrl = "https://www.googleapis.com/drive/v3/files?q=${URLEncoder.encode(query, "UTF-8")}&spaces=drive&fields=files(id,name)"
+            val response = executeWithAuth { token ->
+                Request.Builder()
+                    .url(searchUrl)
+                    .header("Authorization", "Bearer $token")
+                    .get()
+                    .build()
+            }
+
+            if (response != null && response.isSuccessful) {
+                val body = response.body?.string() ?: ""
+                val files = JSONObject(body).optJSONArray("files")
+                if (files != null && files.length() > 0) {
+                    val id = files.getJSONObject(0).getString("id")
+                    cachedFolderId = id
+                    Log.d("GoogleDriveManager", "Found existing FrostBackup folder in Drive: $id")
+                    return@withContext id
+                }
+            }
+
+            // Create visible folder in root of Google Drive
+            val createJson = JSONObject().apply {
+                put("name", "FrostBackup")
+                put("mimeType", "application/vnd.google-apps.folder")
+            }
+            val createResponse = executeWithAuth { token ->
+                Request.Builder()
+                    .url("https://www.googleapis.com/drive/v3/files")
+                    .header("Authorization", "Bearer $token")
+                    .post(createJson.toString().toRequestBody("application/json; charset=UTF-8".toMediaType()))
+                    .build()
+            }
+
+            if (createResponse != null && createResponse.isSuccessful) {
+                val body = createResponse.body?.string() ?: ""
+                val id = JSONObject(body).getString("id")
+                cachedFolderId = id
+                Log.d("GoogleDriveManager", "Created visible FrostBackup folder in Drive: $id")
+                id
+            } else {
+                Log.e("GoogleDriveManager", "Failed to create FrostBackup folder: ${createResponse?.code}")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e("GoogleDriveManager", "Error resolving FrostBackup folder", e)
+            null
+        }
+    }
+
     override suspend fun uploadBackup(file: File, metadataJson: String, onProgress: (Float) -> Unit): Boolean = withContext(Dispatchers.IO) {
         try {
             if (!file.exists() || !file.canRead()) {
@@ -153,9 +213,12 @@ class GoogleDriveManager(private val context: Context) : CloudProvider {
                 return@withContext false
             }
 
+            // Put backup into visible FrostBackup folder
+            val folderId = getOrCreateBackupFolder() ?: "root"
+
             val initJson = JSONObject().apply {
                 put("name", file.name)
-                put("parents", org.json.JSONArray().put("appDataFolder"))
+                put("parents", org.json.JSONArray().put(folderId))
                 put("description", metadataJson)
             }
 
@@ -186,7 +249,7 @@ class GoogleDriveManager(private val context: Context) : CloudProvider {
             val isOk = uploadResponse.isSuccessful
             if (isOk) {
                 onProgress(1.0f)
-                Log.d("GoogleDriveManager", "Successfully uploaded ${file.name} to Google Drive")
+                Log.d("GoogleDriveManager", "Successfully uploaded ${file.name} to visible FrostBackup folder in Drive")
             } else {
                 Log.e("GoogleDriveManager", "Upload payload failed: HTTP ${uploadResponse.code} - ${uploadResponse.body?.string()}")
             }
@@ -234,39 +297,74 @@ class GoogleDriveManager(private val context: Context) : CloudProvider {
     }
 
     override suspend fun listBackups(): List<CloudBackupItem> = withContext(Dispatchers.IO) {
+        val items = mutableListOf<CloudBackupItem>()
         try {
-            val url = "https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(id,name,size,modifiedTime,description)"
-            val response = executeWithAuth { token ->
-                Request.Builder()
-                    .url(url)
-                    .header("Authorization", "Bearer $token")
-                    .get()
-                    .build()
-            } ?: return@withContext emptyList()
+            val folderId = getOrCreateBackupFolder()
 
-            if (!response.isSuccessful) {
-                Log.e("GoogleDriveManager", "listBackups failed: HTTP ${response.code} - ${response.body?.string()}")
-                return@withContext emptyList()
+            // 1. Query visible FrostBackup folder
+            if (folderId != null) {
+                val query = "'$folderId' in parents and trashed = false"
+                val url = "https://www.googleapis.com/drive/v3/files?q=${URLEncoder.encode(query, "UTF-8")}&spaces=drive&fields=files(id,name,size,modifiedTime,description)"
+                val response = executeWithAuth { token ->
+                    Request.Builder()
+                        .url(url)
+                        .header("Authorization", "Bearer $token")
+                        .get()
+                        .build()
+                }
+
+                if (response != null && response.isSuccessful) {
+                    val responseString = response.body?.string() ?: ""
+                    val jsonObject = JSONObject(responseString)
+                    val filesArray = jsonObject.optJSONArray("files")
+                    if (filesArray != null) {
+                        for (i in 0 until filesArray.length()) {
+                            val f = filesArray.getJSONObject(i)
+                            val id = f.getString("id")
+                            val name = f.getString("name")
+                            val size = f.optLong("size", 0L)
+                            val modified = System.currentTimeMillis()
+                            val pkg = name.substringBeforeLast("_")
+                            items.add(CloudBackupItem(id, name, size, modified, pkg))
+                        }
+                    }
+                }
             }
 
-            val responseString = response.body?.string() ?: return@withContext emptyList()
-            val jsonObject = JSONObject(responseString)
-            val filesArray = jsonObject.optJSONArray("files") ?: return@withContext emptyList()
+            // 2. Also check appDataFolder for any earlier backups
+            try {
+                val appDataUrl = "https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(id,name,size,modifiedTime,description)"
+                val appDataResponse = executeWithAuth { token ->
+                    Request.Builder()
+                        .url(appDataUrl)
+                        .header("Authorization", "Bearer $token")
+                        .get()
+                        .build()
+                }
+                if (appDataResponse != null && appDataResponse.isSuccessful) {
+                    val responseString = appDataResponse.body?.string() ?: ""
+                    val jsonObject = JSONObject(responseString)
+                    val filesArray = jsonObject.optJSONArray("files")
+                    if (filesArray != null) {
+                        for (i in 0 until filesArray.length()) {
+                            val f = filesArray.getJSONObject(i)
+                            val id = f.getString("id")
+                            if (items.none { it.id == id }) {
+                                val name = f.getString("name")
+                                val size = f.optLong("size", 0L)
+                                val modified = System.currentTimeMillis()
+                                val pkg = name.substringBeforeLast("_")
+                                items.add(CloudBackupItem(id, name, size, modified, pkg))
+                            }
+                        }
+                    }
+                }
+            } catch (ignored: Exception) {}
 
-            val items = mutableListOf<CloudBackupItem>()
-            for (i in 0 until filesArray.length()) {
-                val f = filesArray.getJSONObject(i)
-                val id = f.getString("id")
-                val name = f.getString("name")
-                val size = f.optLong("size", 0L)
-                val modified = System.currentTimeMillis()
-                val pkg = name.substringBeforeLast("_")
-                items.add(CloudBackupItem(id, name, size, modified, pkg))
-            }
             items
         } catch (e: Exception) {
             Log.e("GoogleDriveManager", "Exception listing backups", e)
-            emptyList()
+            items
         }
     }
 

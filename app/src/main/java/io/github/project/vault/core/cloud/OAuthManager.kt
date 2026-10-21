@@ -51,7 +51,7 @@ object OAuthManager {
             .appendQueryParameter("client_id", CLIENT_ID)
             .appendQueryParameter("redirect_uri", REDIRECT_URI)
             .appendQueryParameter("response_type", "code")
-            .appendQueryParameter("scope", "https://www.googleapis.com/auth/drive.appdata email profile")
+            .appendQueryParameter("scope", "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata email profile")
             .appendQueryParameter("code_challenge", codeChallenge)
             .appendQueryParameter("code_challenge_method", "S256")
             .appendQueryParameter("access_type", "offline")
