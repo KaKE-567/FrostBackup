@@ -60,6 +60,7 @@ import io.github.project.vault.core.cloud.CloudBackupItem
 import io.github.project.vault.core.cloud.GoogleDriveManager
 import io.github.project.vault.core.cloud.OAuthManager
 import io.github.project.vault.data.repository.BackupRepository
+import io.github.project.vault.ui.components.AppIcon
 import io.github.project.vault.ui.components.StatusBadge
 import kotlinx.coroutines.launch
 import java.io.File
@@ -305,6 +306,12 @@ fun CloudScreen(
                                         .padding(14.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    val inferredPkg = item.name.substringBefore("_")
+                                    if (inferredPkg.contains(".")) {
+                                        AppIcon(packageName = inferredPkg, size = 42.dp)
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                    }
+
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = item.name,

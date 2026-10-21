@@ -1,6 +1,7 @@
 package io.github.project.vault.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,18 +12,27 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -30,7 +40,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -39,9 +48,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,9 +57,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.project.vault.core.restore.RestoreEngine
 import io.github.project.vault.core.restore.RestoreProgress
@@ -61,6 +72,7 @@ import io.github.project.vault.core.restore.RestoreResult
 import io.github.project.vault.core.root.RootShell
 import io.github.project.vault.data.model.BackupMetadata
 import io.github.project.vault.data.repository.BackupRepository
+import io.github.project.vault.ui.components.AppIcon
 import io.github.project.vault.ui.components.BackupProgressDialog
 import io.github.project.vault.ui.components.StatusBadge
 import kotlinx.coroutines.launch
@@ -99,6 +111,15 @@ fun RestoreScreen(
         reloadBackups()
     }
 
+    val totalSizeBytes = remember(backups) { backups.sumOf { it.archiveSizeBytes } }
+    val totalSizeMbFormatted = remember(totalSizeBytes) {
+        if (totalSizeBytes > 1024L * 1024L * 1024L) {
+            String.format(Locale.US, "%.2f GB", totalSizeBytes / (1024.0 * 1024.0 * 1024.0))
+        } else {
+            String.format(Locale.US, "%.1f MB", totalSizeBytes / (1024.0 * 1024.0))
+        }
+    }
+
     val outlineColor = MaterialTheme.colorScheme.outline
 
     Scaffold(
@@ -107,14 +128,24 @@ fun RestoreScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = "Available Backups",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "Restore & Archives",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        StatusBadge(
+                            text = "${backups.size} Archives",
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            contentColor = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.80f),
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
                     actionIconContentColor = MaterialTheme.colorScheme.onSurface
                 ),
@@ -136,66 +167,130 @@ fun RestoreScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         modifier = modifier
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
+        LazyColumn(
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = innerPadding.calculateTopPadding() + 12.dp,
+                bottom = innerPadding.calculateBottomPadding() + 24.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxSize()
         ) {
+            // Archives Summary Hero Card
+            item(key = "restore_hero_card") {
+                Card(
+                    shape = RoundedCornerShape(22.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
+                    border = BorderStroke(1.dp, outlineColor.copy(alpha = 0.20f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(18.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Archive,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(14.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Local Backup Vault",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "$totalSizeMbFormatted total on storage • /sdcard/FrostBackup",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
             if (isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                item(key = "loading_state") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
                 }
             } else if (backups.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "No backup archives found.\nCreate one in the Apps tab.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(backups, key = { it.archiveFileName }) { item ->
-                        BackupItemCard(
-                            metadata = item,
-                            onRestore = {
-                                targetRestoreBackup = item
-                                if (item.isEncrypted) {
-                                    passwordInput = ""
-                                    showPasswordDialog = true
-                                } else {
-                                    scope.launch {
-                                        executeRestore(context, item, null, backupRepository, { activeProgress = it }, {
-                                            activeProgress = null
-                                            if (it) showRebootDialog = true
-                                        }, snackbarHostState)
-                                    }
-                                }
-                            },
-                            onDelete = {
-                                scope.launch {
-                                    backupRepository.deleteBackup(item.archiveFileName)
-                                    reloadBackups()
-                                    snackbarHostState.showSnackbar("Backup deleted")
-                                }
-                            },
-                            onUploadToCloud = {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("Uploading ${item.appName} to Google Drive…")
-                                    val ok = backupRepository.uploadToCloud(item.archiveFileName)
-                                    if (ok) {
-                                        snackbarHostState.showSnackbar("Uploaded ${item.appName} to Google Drive!")
-                                    } else {
-                                        snackbarHostState.showSnackbar("Cloud upload failed. Please verify Google Drive sign-in.")
-                                    }
-                                }
-                            }
+                item(key = "empty_state") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No backup archives found.\nCreate one from the Applications tab.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+            } else {
+                items(backups, key = { it.archiveFileName }) { item ->
+                    BackupArchiveCard(
+                        metadata = item,
+                        onRestore = {
+                            targetRestoreBackup = item
+                            if (item.isEncrypted) {
+                                passwordInput = ""
+                                showPasswordDialog = true
+                            } else {
+                                scope.launch {
+                                    executeRestore(context, item, null, backupRepository, { activeProgress = it }, {
+                                        activeProgress = null
+                                        if (it) showRebootDialog = true
+                                    }, snackbarHostState)
+                                }
+                            }
+                        },
+                        onDelete = {
+                            scope.launch {
+                                backupRepository.deleteBackup(item.archiveFileName)
+                                reloadBackups()
+                                snackbarHostState.showSnackbar("Backup deleted")
+                            }
+                        },
+                        onUploadToCloud = {
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Uploading ${item.appName} to Google Drive…")
+                                val ok = backupRepository.uploadToCloud(item.archiveFileName)
+                                if (ok) {
+                                    snackbarHostState.showSnackbar("Uploaded ${item.appName} to Google Drive!")
+                                } else {
+                                    snackbarHostState.showSnackbar("Cloud upload failed. Please verify Google Drive sign-in.")
+                                }
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -287,46 +382,55 @@ fun RestoreScreen(
 
 private suspend fun executeRestore(
     context: android.content.Context,
-    metadata: BackupMetadata,
-    password: String?,
-    repository: BackupRepository,
+    item: BackupMetadata,
+    pass: String?,
+    backupRepository: BackupRepository,
     onProgress: (RestoreProgress) -> Unit,
-    onComplete: (Boolean) -> Unit,
-    snackbar: SnackbarHostState
+    onFinished: (Boolean) -> Unit,
+    snackbarHostState: SnackbarHostState
 ) {
     val engine = RestoreEngine(context)
-    val archiveFile = File(repository.getBackupDirectory(), metadata.archiveFileName)
+    val archiveFile = File(backupRepository.getBackupDirectory(), item.archiveFileName)
 
-    val result = engine.performRestore(archiveFile, password) { prog ->
+    onProgress(RestoreProgress("Preparing restore…", 0.05f, item.appName))
+    val result = engine.performRestore(archiveFile, pass) { prog ->
         onProgress(prog)
     }
 
     when (result) {
         is RestoreResult.Success -> {
-            snackbar.showSnackbar("Restored ${metadata.appName}")
-            onComplete(result.needsReboot)
+            snackbarHostState.showSnackbar("Restored ${item.appName} successfully!")
+            onFinished(result.requiresReboot)
         }
         is RestoreResult.Error -> {
-            snackbar.showSnackbar("Restore error: ${result.message}")
-            onComplete(false)
+            snackbarHostState.showSnackbar("Restore failed for ${item.appName}: ${result.message}")
+            onFinished(false)
         }
     }
 }
 
 @Composable
-private fun BackupItemCard(
+fun BackupArchiveCard(
     metadata: BackupMetadata,
     onRestore: () -> Unit,
     onDelete: () -> Unit,
-    onUploadToCloud: () -> Unit
+    onUploadToCloud: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val dateFormatter = remember { SimpleDateFormat("MMM dd, yyyy • HH:mm", Locale.getDefault()) }
     val formattedDate = remember(metadata.backupTimestamp) {
         dateFormatter.format(Date(metadata.backupTimestamp))
     }
     val sizeMb = remember(metadata.archiveSizeBytes) {
-        String.format("%.1f MB", metadata.archiveSizeBytes / (1024.0 * 1024.0))
+        if (metadata.archiveSizeBytes > 1024L * 1024L * 1024L) {
+            String.format(Locale.US, "%.2f GB", metadata.archiveSizeBytes / (1024.0 * 1024.0 * 1024.0))
+        } else {
+            String.format(Locale.US, "%.1f MB", metadata.archiveSizeBytes / (1024.0 * 1024.0))
+        }
     }
+
+    val outlineColor = MaterialTheme.colorScheme.outline
+    val frostedBorder = BorderStroke(1.dp, outlineColor.copy(alpha = 0.20f))
 
     Card(
         shape = RoundedCornerShape(20.dp),
@@ -334,91 +438,145 @@ private fun BackupItemCard(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
             contentColor = MaterialTheme.colorScheme.onSurface
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.20f)),
+        border = frostedBorder,
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // High-Res App Icon
+                AppIcon(
+                    packageName = metadata.packageName,
+                    size = 46.dp
+                )
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = metadata.appName,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = metadata.packageName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "$formattedDate • $sizeMb",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+
+                if (metadata.isEncrypted) {
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.40f))
+                            .padding(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = "Encrypted",
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Component tags included in this backup archive
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (metadata.hasApk) ArchiveTag(icon = Icons.Default.Layers, text = "APK")
+                if (metadata.hasData) ArchiveTag(icon = Icons.Default.Storage, text = "Data")
+                if (metadata.hasKeystore) ArchiveTag(icon = Icons.Default.Key, text = "Keystore")
+                if (metadata.hasExternalData) ArchiveTag(icon = Icons.Default.Folder, text = "External")
+                if (metadata.ssaid != null) ArchiveTag(icon = Icons.Default.Lock, text = "Session")
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Action Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = metadata.appName,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = metadata.packageName,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    IconButton(onClick = onUploadToCloud) {
+                        Icon(
+                            imageVector = Icons.Default.CloudUpload,
+                            contentDescription = "Upload to Cloud",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
 
-                if (metadata.isEncrypted) {
-                    StatusBadge(
-                        text = "Encrypted",
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "$formattedDate • $sizeMb",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-
-                if (metadata.ssaid != null) {
-                    StatusBadge(
-                        text = "Signed-In Session",
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onUploadToCloud) {
-                    Icon(
-                        imageVector = Icons.Default.CloudUpload,
-                        contentDescription = "Upload to Cloud",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete",
-                        tint = MaterialTheme.colorScheme.error
-                    )
+                    IconButton(onClick = onDelete) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
 
                 Button(
                     onClick = onRestore,
-                    shape = RoundedCornerShape(12.dp)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.height(40.dp)
                 ) {
-                    Icon(Icons.Default.Restore, contentDescription = null)
-                    Spacer(modifier = Modifier.padding(horizontal = 4.dp))
-                    Text("Restore")
+                    Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Restore", fontWeight = FontWeight.SemiBold)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ArchiveTag(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.50f))
+            .padding(horizontal = 6.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(11.dp)
+        )
+        Spacer(modifier = Modifier.width(3.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
