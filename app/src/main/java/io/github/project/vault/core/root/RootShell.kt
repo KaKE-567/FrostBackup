@@ -1,0 +1,58 @@
+package io.github.project.vault.core.root
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import java.io.BufferedReader
+import java.io.DataOutputStream
+import java.io.InputStreamReader
+
+object RootShell {
+    private var isRootedCache: Boolean? = null
+
+    suspend fun isRootAvailable(): Boolean = withContext(Dispatchers.IO) {
+        if (isRootedCache != null) return@withContext isRootedCache!!
+        val result = execute("id")
+        val isRoot = result.isSuccess && result.stdout.contains("uid=0(root)")
+        isRootedCache = isRoot
+        isRoot
+    }
+
+    suspend fun execute(command: String, timeoutMs: Long = 60_000L): ShellResult = withContext(Dispatchers.IO) {
+        val timedResult = withTimeoutOrNull(timeoutMs) {
+            try {
+                val process = ProcessBuilder("su").start()
+                val os = DataOutputStream(process.outputStream)
+                val stdoutReader = BufferedReader(InputStreamReader(process.inputStream))
+                val stderrReader = BufferedReader(InputStreamReader(process.errorStream))
+
+                // Write command and exit
+                os.writeBytes("$command\n")
+                os.writeBytes("exit\n")
+                os.flush()
+
+                val stdout = stdoutReader.readText().trim()
+                val stderr = stderrReader.readText().trim()
+                val exitCode = process.waitFor()
+
+                os.close()
+                stdoutReader.close()
+                stderrReader.close()
+
+                ShellResult(exitCode, stdout, stderr)
+            } catch (e: Exception) {
+                ShellResult(-1, "", e.message ?: "Execution error")
+            }
+        }
+        timedResult ?: ShellResult(-2, "", "Command timed out after ${timeoutMs}ms")
+    }
+
+    suspend fun executeBatch(commands: List<String>, timeoutMs: Long = 180_000L): ShellResult = withContext(Dispatchers.IO) {
+        val script = commands.joinToString("\n")
+        execute(script, timeoutMs)
+    }
+
+    fun clearCache() {
+        isRootedCache = null
+    }
+}

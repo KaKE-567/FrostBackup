@@ -1,0 +1,41 @@
+<resources>
+    <string name="app_name">FrostBackup</string>
+    <string name="nav_apps">Apps</string>
+    <string name="nav_restore">Restore</string>
+    <string name="nav_cloud">Cloud Sync</string>
+    <string name="nav_settings">Settings</string>
+
+    <string name="search_apps">Search apps or packages…</string>
+    <string name="filter_all">All</string>
+    <string name="filter_user">User</string>
+    <string name="filter_system">System</string>
+    <string name="filter_backed_up">Backed Up</string>
+
+    <string name="root_status_granted">Root Granted</string>
+    <string name="root_status_denied">Root Denied</string>
+    <string name="root_status_checking">Checking Root…</string>
+
+    <string name="action_backup">Backup</string>
+    <string name="action_restore">Restore</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_reboot">Reboot Device</string>
+
+    <string name="opt_apk">Split APKs &amp; Binaries</string>
+    <string name="opt_internal_data">Internal Data (/data/data)</string>
+    <string name="opt_external_data">External Data (/sdcard/Android)</string>
+    <string name="opt_ssaid">Preserve SSAID (Keep Signed In)</string>
+    <string name="opt_keystore">Preserve Keystore Tokens</string>
+    <string name="opt_encrypt">Zero-Knowledge Encryption</string>
+    <string name="opt_cloud">Upload to Google Drive</string>
+
+    <string name="dialog_enter_password">Enter Encryption Password</string>
+    <string name="dialog_reboot_title">Reboot Recommended</string>
+    <string name="dialog_reboot_desc">Restoring SSAID requires a quick reboot for the Android system to commit restored session identifiers.</string>
+
+    <string name="cloud_gdrive_title">Google Drive</string>
+    <string name="cloud_gdrive_desc">Encrypted backups stored in private AppData folder</string>
+    <string name="cloud_connect">Connect Google Drive</string>
+    <string name="cloud_disconnect">Disconnect</string>
+    <string name="cloud_sync_now">Sync Now</string>
+</resources>
