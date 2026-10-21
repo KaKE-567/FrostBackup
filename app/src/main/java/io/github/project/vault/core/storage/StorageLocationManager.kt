@@ -9,7 +9,9 @@ import android.os.storage.StorageManager
 import io.github.project.vault.core.root.RootShell
 import io.github.project.vault.data.model.StorageTarget
 import io.github.project.vault.data.model.StorageType
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -51,7 +53,10 @@ object StorageLocationManager {
     fun setSelectedBackupDirectory(context: Context, path: String) {
         getPrefs(context).edit().putString(KEY_SELECTED_PATH, path).apply()
         // Ensure destination directory is created with accessible permissions
-        RootShell.execute("mkdir -p $path && chmod -R 777 $path 2>/dev/null")
+        runCatching { File(path).mkdirs() }
+        CoroutineScope(Dispatchers.IO).launch {
+            RootShell.execute("mkdir -p $path && chmod -R 777 $path 2>/dev/null")
+        }
     }
 
     suspend fun getAvailableStorageTargets(context: Context): List<StorageTarget> = withContext(Dispatchers.IO) {
