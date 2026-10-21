@@ -13,18 +13,23 @@ class BackupRepository(private val context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
 
     fun getBackupDirectory(): File {
-        val rootSdcard = File(Environment.getExternalStorageDirectory(), "AppVault/Backups")
-        if (!rootSdcard.exists()) {
-            rootSdcard.mkdirs()
-        }
-        return rootSdcard
+        val dir = File(Environment.getExternalStorageDirectory(), "FrostBackup/Backups")
+        return dir
     }
 
     suspend fun getLocalBackups(): List<BackupMetadata> = withContext(Dispatchers.IO) {
         val backupDir = getBackupDirectory()
-        val vaultFiles = backupDir.listFiles { _, name -> name.endsWith(".vault") } ?: return@withContext emptyList()
+        RootShell.execute("mkdir -p ${backupDir.absolutePath}")
 
-        vaultFiles.mapNotNull { file ->
+        // List files via root to bypass any Scoped Storage blocks
+        val listResult = RootShell.execute("ls -1 ${backupDir.absolutePath}/*.vault 2>/dev/null")
+        if (!listResult.isSuccess || listResult.stdout.isBlank()) {
+            return@withContext emptyList()
+        }
+
+        val filePaths = listResult.stdout.lines().map { it.trim() }.filter { it.endsWith(".vault") }
+        filePaths.mapNotNull { path ->
+            val file = File(path)
             parseMetadataFromArchive(file)
         }.sortedByDescending { it.backupTimestamp }
     }
@@ -35,18 +40,21 @@ class BackupRepository(private val context: Context) {
         )
         return if (result.isSuccess && result.stdout.isNotBlank()) {
             try {
+                val sizeResult = RootShell.execute("stat -c %s ${file.absolutePath} 2>/dev/null || wc -c < ${file.absolutePath}")
+                val sizeBytes = sizeResult.stdout.trim().toLongOrNull() ?: file.length()
                 json.decodeFromString<BackupMetadata>(result.stdout).copy(
-                    archiveSizeBytes = file.length(),
+                    archiveSizeBytes = sizeBytes,
                     archiveFileName = file.name
                 )
             } catch (e: Exception) {
                 null
             }
         } else {
-            // If encrypted or missing internal metadata, synthesize from filename
+            val sizeResult = RootShell.execute("stat -c %s ${file.absolutePath} 2>/dev/null || wc -c < ${file.absolutePath}")
+            val sizeBytes = sizeResult.stdout.trim().toLongOrNull() ?: file.length()
             val parts = file.nameWithoutExtension.split("_")
             val pkg = parts.getOrNull(0) ?: file.nameWithoutExtension
-            val timestamp = parts.getOrNull(1)?.toLongOrNull() ?: file.lastModified()
+            val timestamp = parts.getOrNull(1)?.toLongOrNull() ?: System.currentTimeMillis()
             BackupMetadata(
                 packageName = pkg,
                 appName = pkg,
@@ -57,17 +65,14 @@ class BackupRepository(private val context: Context) {
                 backupTimestamp = timestamp,
                 isEncrypted = true,
                 archiveFileName = file.name,
-                archiveSizeBytes = file.length()
+                archiveSizeBytes = sizeBytes
             )
         }
     }
 
     suspend fun deleteBackup(archiveFileName: String): Boolean = withContext(Dispatchers.IO) {
-        val file = File(getBackupDirectory(), archiveFileName)
-        if (file.exists()) {
-            file.delete()
-        } else {
-            false
-        }
+        val filePath = "${getBackupDirectory().absolutePath}/$archiveFileName"
+        val result = RootShell.execute("rm -f $filePath")
+        result.isSuccess
     }
 }

@@ -31,19 +31,23 @@ class BackupEngine(private val context: Context) {
 
         val timestamp = System.currentTimeMillis()
         val stagingPath = "/data/local/tmp/vault_${app.packageName}_$timestamp"
-        destinationDir.mkdirs()
+        val payloadPath = "$stagingPath/payload"
+
+        // Ensure destination folder is created via root so Android Scoped Storage does not block it
+        RootShell.execute("mkdir -p ${destinationDir.absolutePath}")
+        RootShell.execute("chmod 775 ${destinationDir.absolutePath}")
 
         try {
             onProgress(BackupProgress("Freezing app process…", 0.1f, app.appName))
             RootShell.execute("am force-stop ${app.packageName}")
-            RootShell.execute("mkdir -p $stagingPath/apk $stagingPath/keystore")
+            RootShell.execute("mkdir -p $payloadPath/apk $payloadPath/keystore")
 
             // 1. Back up APKs
             if (config.includeApk) {
                 onProgress(BackupProgress("Backing up APK binaries…", 0.25f, app.appName))
-                RootShell.execute("cp -p ${app.sourceDir} $stagingPath/apk/base.apk")
+                RootShell.execute("cp -p ${app.sourceDir} $payloadPath/apk/base.apk")
                 app.splitSourceDirs.forEachIndexed { index, splitPath ->
-                    RootShell.execute("cp -p $splitPath $stagingPath/apk/split_$index.apk")
+                    RootShell.execute("cp -p $splitPath $payloadPath/apk/split_$index.apk")
                 }
             }
 
@@ -52,13 +56,13 @@ class BackupEngine(private val context: Context) {
             if (config.includeInternalData) {
                 onProgress(BackupProgress("Archiving internal app data…", 0.45f, app.appName))
                 val dataTarResult = RootShell.execute(
-                    "tar -cpf $stagingPath/data.tar -C /data/data ${app.packageName} 2>/dev/null"
+                    "tar -cpf $payloadPath/data.tar -C /data/data ${app.packageName} 2>/dev/null"
                 )
                 hasData = dataTarResult.isSuccess
 
                 // Device-encrypted data
                 RootShell.execute(
-                    "tar -cpf $stagingPath/de_data.tar -C /data/user_de/0 ${app.packageName} 2>/dev/null"
+                    "tar -cpf $payloadPath/de_data.tar -C /data/user_de/0 ${app.packageName} 2>/dev/null"
                 )
             }
 
@@ -66,9 +70,8 @@ class BackupEngine(private val context: Context) {
             var hasExtData = false
             if (config.includeExternalData) {
                 onProgress(BackupProgress("Archiving external storage data…", 0.60f, app.appName))
-                val extPath = "/sdcard/Android/data/${app.packageName}"
                 val extTarResult = RootShell.execute(
-                    "tar -cpf $stagingPath/ext_data.tar -C /sdcard/Android/data ${app.packageName} 2>/dev/null"
+                    "tar -cpf $payloadPath/ext_data.tar -C /sdcard/Android/data ${app.packageName} 2>/dev/null"
                 )
                 hasExtData = extTarResult.isSuccess
             }
@@ -84,7 +87,7 @@ class BackupEngine(private val context: Context) {
             var hasKeystore = false
             if (config.includeKeystore) {
                 onProgress(BackupProgress("Extracting Keystore encryption tokens…", 0.75f, app.appName))
-                val keystoreStaging = File(stagingPath, "keystore")
+                val keystoreStaging = File(payloadPath, "keystore")
                 hasKeystore = KeystoreManager.backupKeystoreForUid(app.uid, keystoreStaging)
             }
 
@@ -95,7 +98,6 @@ class BackupEngine(private val context: Context) {
 
             // 7. Write Metadata JSON
             val baseFileName = "${app.packageName}_$timestamp.vault"
-            val rawArchiveFile = File(destinationDir, "$baseFileName.tar")
             val finalArchiveFile = File(destinationDir, baseFileName)
 
             val metadata = BackupMetadata(
@@ -120,11 +122,14 @@ class BackupEngine(private val context: Context) {
             val metadataString = json.encodeToString(metadata)
             val metaFile = File(context.cacheDir, "metadata.json")
             metaFile.writeText(metadataString)
-            RootShell.execute("cp ${metaFile.absolutePath} $stagingPath/metadata.json")
+            RootShell.execute("cp ${metaFile.absolutePath} $payloadPath/metadata.json")
 
-            // 8. Package staging folder into final archive
+            // 8. Package staging folder into bundle inside /data/local/tmp
             onProgress(BackupProgress("Compressing backup package…", 0.85f, app.appName))
-            val tarResult = RootShell.execute("tar -cpf ${rawArchiveFile.absolutePath} -C $stagingPath .")
+            val rawBundlePath = "$stagingPath/bundle.tar"
+            val finalBundlePath = "$stagingPath/final.vault"
+
+            val tarResult = RootShell.execute("tar -cpf $rawBundlePath -C $payloadPath .")
             if (!tarResult.isSuccess) {
                 return@withContext BackupResult.Error("Failed to create backup archive: ${tarResult.stderr}")
             }
@@ -132,23 +137,31 @@ class BackupEngine(private val context: Context) {
             // 9. Client-Side Encryption
             if (config.encrypt && !config.encryptionPassword.isNullOrBlank()) {
                 onProgress(BackupProgress("Encrypting archive with AES-256…", 0.90f, app.appName))
-                CryptoManager.encryptFile(rawArchiveFile, finalArchiveFile, config.encryptionPassword)
-                rawArchiveFile.delete()
+                CryptoManager.encryptFile(File(rawBundlePath), File(finalBundlePath), config.encryptionPassword)
+                RootShell.execute("rm -f $rawBundlePath")
             } else {
-                rawArchiveFile.renameTo(finalArchiveFile)
+                RootShell.execute("mv $rawBundlePath $finalBundlePath")
             }
 
-            // 10. Google Drive Cloud Upload
+            // 10. Copy final archive to storage destination via root
+            onProgress(BackupProgress("Saving archive to storage…", 0.93f, app.appName))
+            RootShell.execute("cp -p $finalBundlePath ${finalArchiveFile.absolutePath}")
+            RootShell.execute("chmod 664 ${finalArchiveFile.absolutePath}")
+
+            // 11. Google Drive Cloud Upload
             if (config.uploadToCloud) {
                 onProgress(BackupProgress("Uploading to Google Drive…", 0.95f, app.appName))
                 val drive = GoogleDriveManager(context)
                 if (drive.isConnected()) {
-                    drive.uploadBackup(finalArchiveFile, metadataString) {}
+                    drive.uploadBackup(File(finalBundlePath), metadataString) {}
                 }
             }
 
+            val sizeResult = RootShell.execute("stat -c %s ${finalArchiveFile.absolutePath} 2>/dev/null || wc -c < ${finalArchiveFile.absolutePath}")
+            val finalSize = sizeResult.stdout.trim().toLongOrNull() ?: 0L
+
             onProgress(BackupProgress("Backup completed successfully!", 1.0f, app.appName))
-            BackupResult.Success(finalArchiveFile.absolutePath, finalArchiveFile.length())
+            BackupResult.Success(finalArchiveFile.absolutePath, finalSize)
         } catch (e: Exception) {
             e.printStackTrace()
             BackupResult.Error("Backup failed: ${e.message}", e)
