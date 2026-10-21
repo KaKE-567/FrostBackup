@@ -118,6 +118,8 @@ object OAuthManager {
         }
     }
 
+    suspend fun handleAuthCode(context: Context, code: String): Boolean = exchangeCodeForToken(context, code)
+
     private suspend fun exchangeCodeForToken(context: Context, code: String): Boolean = withContext(Dispatchers.IO) {
         val prefs = context.getSharedPreferences("vault_oauth_prefs", Context.MODE_PRIVATE)
         val codeVerifier = prefs.getString(PREF_KEY_VERIFIER, null) ?: return@withContext false
