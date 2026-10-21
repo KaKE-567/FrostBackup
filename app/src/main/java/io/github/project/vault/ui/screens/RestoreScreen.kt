@@ -71,6 +71,7 @@ import io.github.project.vault.core.restore.RestoreProgress
 import io.github.project.vault.core.restore.RestoreResult
 import io.github.project.vault.core.root.RootShell
 import io.github.project.vault.data.model.BackupMetadata
+import io.github.project.vault.data.repository.AppRepository
 import io.github.project.vault.data.repository.BackupRepository
 import io.github.project.vault.ui.components.AppIcon
 import io.github.project.vault.ui.components.BackupProgressDialog
@@ -91,8 +92,8 @@ fun RestoreScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    var isLoading by remember { mutableStateOf(true) }
-    var backups by remember { mutableStateOf<List<BackupMetadata>>(emptyList()) }
+    var backups by remember { mutableStateOf(backupRepository.getCachedBackups() ?: emptyList()) }
+    var isLoading by remember { mutableStateOf(backups.isEmpty()) }
     var activeProgress by remember { mutableStateOf<RestoreProgress?>(null) }
 
     // Dialog state for Password prompt & Reboot prompt
@@ -101,14 +102,18 @@ fun RestoreScreen(
     var showPasswordDialog by remember { mutableStateOf(false) }
     var showRebootDialog by remember { mutableStateOf(false) }
 
-    suspend fun reloadBackups() {
-        isLoading = true
-        backups = backupRepository.getLocalBackups()
+    suspend fun reloadBackups(forceRefresh: Boolean = false) {
+        if (backups.isEmpty()) {
+            isLoading = true
+        }
+        backups = backupRepository.getLocalBackups(forceRefresh)
         isLoading = false
     }
 
     LaunchedEffect(Unit) {
-        reloadBackups()
+        if (backups.isEmpty()) {
+            reloadBackups(forceRefresh = false)
+        }
     }
 
     val totalSizeBytes = remember(backups) { backups.sumOf { it.archiveSizeBytes } }
@@ -158,7 +163,7 @@ fun RestoreScreen(
                     )
                 },
                 actions = {
-                    IconButton(onClick = { scope.launch { reloadBackups() } }) {
+                    IconButton(onClick = { scope.launch { reloadBackups(forceRefresh = true) } }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
                 }
@@ -277,7 +282,8 @@ fun RestoreScreen(
                         onDelete = {
                             scope.launch {
                                 backupRepository.deleteBackup(item.archiveFileName)
-                                reloadBackups()
+                                AppRepository.invalidateCache()
+                                reloadBackups(forceRefresh = true)
                                 snackbarHostState.showSnackbar("Backup deleted")
                             }
                         },

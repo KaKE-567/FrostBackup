@@ -7,6 +7,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -147,7 +149,11 @@ class MainActivity : ComponentActivity() {
                                 NavHost(
                                     navController = navController,
                                     startDestination = Screen.Apps.route,
-                                    modifier = Modifier.padding(innerPadding)
+                                    modifier = Modifier.padding(innerPadding),
+                                    enterTransition = { EnterTransition.None },
+                                    exitTransition = { ExitTransition.None },
+                                    popEnterTransition = { EnterTransition.None },
+                                    popExitTransition = { ExitTransition.None }
                                 ) {
                                     composable(Screen.Apps.route) {
                                         AppListScreen(appRepository = appRepository, backupRepository = backupRepository)

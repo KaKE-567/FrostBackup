@@ -23,6 +23,22 @@ import java.util.concurrent.TimeUnit
 class GoogleDriveManager(private val context: Context) : CloudProvider {
     override val providerName: String = "Google Drive"
 
+    companion object {
+        @Volatile
+        var cachedBackups: List<CloudBackupItem>? = null
+        @Volatile
+        var cachedIsConnected: Boolean? = null
+
+        fun invalidateCache() {
+            cachedBackups = null
+            cachedIsConnected = null
+        }
+    }
+
+    fun hasCachedConnection(): Boolean {
+        return !accessToken.isNullOrBlank() || !refreshToken.isNullOrBlank()
+    }
+
     private val prefs: SharedPreferences = context.getSharedPreferences("vault_cloud_prefs", Context.MODE_PRIVATE)
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -76,6 +92,7 @@ class GoogleDriveManager(private val context: Context) : CloudProvider {
 
     override suspend fun disconnect() {
         cachedFolderId = null
+        invalidateCache()
         prefs.edit()
             .remove("gdrive_access_token")
             .remove("gdrive_refresh_token")
@@ -248,6 +265,7 @@ class GoogleDriveManager(private val context: Context) : CloudProvider {
             val uploadResponse = httpClient.newCall(uploadRequest).execute()
             val isOk = uploadResponse.isSuccessful
             if (isOk) {
+                cachedBackups = null
                 onProgress(1.0f)
                 Log.d("GoogleDriveManager", "Successfully uploaded ${file.name} to visible FrostBackup folder in Drive")
             } else {
@@ -361,6 +379,8 @@ class GoogleDriveManager(private val context: Context) : CloudProvider {
                 }
             } catch (ignored: Exception) {}
 
+            cachedBackups = items
+            cachedIsConnected = true
             items
         } catch (e: Exception) {
             Log.e("GoogleDriveManager", "Exception listing backups", e)
@@ -377,6 +397,9 @@ class GoogleDriveManager(private val context: Context) : CloudProvider {
                     .delete()
                     .build()
             } ?: return@withContext false
+            if (response.isSuccessful) {
+                cachedBackups = null
+            }
             response.isSuccessful
         } catch (e: Exception) {
             Log.e("GoogleDriveManager", "Exception deleting backup", e)

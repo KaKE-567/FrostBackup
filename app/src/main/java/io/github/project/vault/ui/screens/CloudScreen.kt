@@ -76,21 +76,37 @@ fun CloudScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val driveManager = remember { GoogleDriveManager(context) }
 
-    var isConnected by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(true) }
-    var cloudBackups by remember { mutableStateOf<List<CloudBackupItem>>(emptyList()) }
+    var isConnected by remember { mutableStateOf(GoogleDriveManager.cachedIsConnected ?: driveManager.hasCachedConnection()) }
+    var cloudBackups by remember { mutableStateOf(GoogleDriveManager.cachedBackups ?: emptyList()) }
+    var isLoading by remember { mutableStateOf(isConnected && cloudBackups.isEmpty()) }
 
-    suspend fun refreshCloudState() {
-        isLoading = true
-        isConnected = driveManager.isConnected()
-        if (isConnected) {
-            cloudBackups = driveManager.listBackups()
+    suspend fun refreshCloudState(forceRefresh: Boolean = false) {
+        val connected = driveManager.isConnected()
+        isConnected = connected
+        GoogleDriveManager.cachedIsConnected = connected
+
+        if (connected) {
+            if (GoogleDriveManager.cachedBackups == null || forceRefresh) {
+                if (cloudBackups.isEmpty()) isLoading = true
+                val backups = driveManager.listBackups()
+                cloudBackups = backups
+                GoogleDriveManager.cachedBackups = backups
+                isLoading = false
+            } else {
+                cloudBackups = GoogleDriveManager.cachedBackups!!
+                isLoading = false
+            }
+        } else {
+            cloudBackups = emptyList()
+            GoogleDriveManager.cachedBackups = null
+            isLoading = false
         }
-        isLoading = false
     }
 
     LaunchedEffect(Unit) {
-        refreshCloudState()
+        if (cloudBackups.isEmpty()) {
+            refreshCloudState(forceRefresh = false)
+        }
     }
 
     val outlineColor = MaterialTheme.colorScheme.outline
@@ -122,7 +138,7 @@ fun CloudScreen(
                 },
                 actions = {
                     if (isConnected) {
-                        IconButton(onClick = { scope.launch { refreshCloudState() } }) {
+                        IconButton(onClick = { scope.launch { refreshCloudState(forceRefresh = true) } }) {
                             Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                         }
                     }
@@ -218,7 +234,7 @@ fun CloudScreen(
                             onClick = {
                                 OAuthManager.startBrowserAuth(context) { success, msg ->
                                     scope.launch {
-                                        refreshCloudState()
+                                        refreshCloudState(forceRefresh = true)
                                         snackbarHostState.showSnackbar(msg ?: "Connected")
                                     }
                                 }
@@ -243,7 +259,7 @@ fun CloudScreen(
                             onClick = {
                                 scope.launch {
                                     driveManager.disconnect()
-                                    refreshCloudState()
+                                    refreshCloudState(forceRefresh = true)
                                     snackbarHostState.showSnackbar("Signed out of Google Drive")
                                 }
                             },
@@ -347,7 +363,7 @@ fun CloudScreen(
                                             scope.launch {
                                                 val ok = driveManager.deleteBackup(item.fileId)
                                                 if (ok) {
-                                                    refreshCloudState()
+                                                    refreshCloudState(forceRefresh = true)
                                                     snackbarHostState.showSnackbar("Removed from Google Drive")
                                                 }
                                             }

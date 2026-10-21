@@ -11,6 +11,8 @@ import java.io.InputStreamReader
 object RootShell {
     private var isRootedCache: Boolean? = null
 
+    fun isRootAvailableSync(): Boolean? = isRootedCache
+
     suspend fun isRootAvailable(forceCheck: Boolean = false): Boolean = withContext(Dispatchers.IO) {
         if (!forceCheck && isRootedCache == true) return@withContext true
         clearCache()

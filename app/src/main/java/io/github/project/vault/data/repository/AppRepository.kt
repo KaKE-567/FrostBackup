@@ -2,10 +2,13 @@ package io.github.project.vault.data.repository
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
-import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.os.Build
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.drawable.toBitmap
 import io.github.project.vault.data.model.AppInfo
+import io.github.project.vault.ui.components.AppIconCache
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -16,7 +19,26 @@ class AppRepository(
 ) {
     private val packageManager: PackageManager = context.packageManager
 
-    suspend fun getInstalledAppsFast(includeSystem: Boolean = false): List<AppInfo> = withContext(Dispatchers.IO) {
+    companion object {
+        @Volatile
+        private var cachedInstalledApps: List<AppInfo>? = null
+        @Volatile
+        private var cachedEnrichedApps: List<AppInfo>? = null
+
+        fun getCachedApps(): List<AppInfo>? = cachedEnrichedApps ?: cachedInstalledApps
+
+        fun invalidateCache() {
+            cachedInstalledApps = null
+            cachedEnrichedApps = null
+        }
+    }
+
+    suspend fun getInstalledAppsFast(includeSystem: Boolean = false, forceRefresh: Boolean = false): List<AppInfo> = withContext(Dispatchers.IO) {
+        if (!forceRefresh && cachedInstalledApps != null) {
+            val cached = cachedInstalledApps!!
+            return@withContext if (includeSystem) cached else cached.filter { !it.isSystemApp }
+        }
+
         val flags = PackageManager.GET_META_DATA
         val installedPackages = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             packageManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(flags.toLong()))
@@ -25,13 +47,9 @@ class AppRepository(
             packageManager.getInstalledPackages(flags)
         }
 
-        installedPackages.mapNotNull { packageInfo ->
+        val apps = installedPackages.mapNotNull { packageInfo ->
             val appInfo = packageInfo.applicationInfo ?: return@mapNotNull null
             val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-
-            if (!includeSystem && isSystem) {
-                return@mapNotNull null
-            }
 
             val appName = appInfo.loadLabel(packageManager).toString()
             val versionName = packageInfo.versionName ?: "1.0"
@@ -43,8 +61,6 @@ class AppRepository(
             }
 
             val splitDirs = appInfo.splitSourceDirs?.toList() ?: emptyList()
-
-            // Approximate app size
             val apkSize = File(appInfo.sourceDir).length()
             val sizeFormatted = formatFileSize(apkSize)
 
@@ -63,11 +79,31 @@ class AppRepository(
                 lastBackupTimestamp = null
             )
         }.sortedBy { it.appName.lowercase() }
+
+        cachedInstalledApps = apps
+
+        // Pre-warm icon cache for top 40 non-system apps in background IO
+        val topApps = apps.filter { !it.isSystemApp }.take(40)
+        for (app in topApps) {
+            if (AppIconCache.get(app.packageName) == null) {
+                runCatching {
+                    val drawable = packageManager.getApplicationIcon(app.packageName)
+                    val bmp = drawable.toBitmap(100, 100, Bitmap.Config.ARGB_8888).asImageBitmap()
+                    AppIconCache.put(app.packageName, bmp)
+                }
+            }
+        }
+
+        if (includeSystem) apps else apps.filter { !it.isSystemApp }
     }
 
-    suspend fun enrichWithBackupStatus(apps: List<AppInfo>): List<AppInfo> = withContext(Dispatchers.IO) {
-        val backupMap = backupRepository.getLocalBackups().associateBy { it.packageName }
-        apps.map { app ->
+    suspend fun enrichWithBackupStatus(apps: List<AppInfo>, forceRefresh: Boolean = false): List<AppInfo> = withContext(Dispatchers.IO) {
+        if (!forceRefresh && cachedEnrichedApps != null && cachedEnrichedApps?.size == apps.size) {
+            return@withContext cachedEnrichedApps!!
+        }
+
+        val backupMap = backupRepository.getLocalBackups(forceRefresh).associateBy { it.packageName }
+        val enriched = apps.map { app ->
             val backup = backupMap[app.packageName]
             if (backup != null) {
                 app.copy(
@@ -78,11 +114,13 @@ class AppRepository(
                 app
             }
         }
+        cachedEnrichedApps = enriched
+        enriched
     }
 
-    suspend fun getInstalledApps(includeSystem: Boolean = false): List<AppInfo> = withContext(Dispatchers.IO) {
-        val fastList = getInstalledAppsFast(includeSystem)
-        enrichWithBackupStatus(fastList)
+    suspend fun getInstalledApps(includeSystem: Boolean = false, forceRefresh: Boolean = false): List<AppInfo> = withContext(Dispatchers.IO) {
+        val fastList = getInstalledAppsFast(includeSystem, forceRefresh)
+        enrichWithBackupStatus(fastList, forceRefresh)
     }
 
     private fun formatFileSize(bytes: Long): String {

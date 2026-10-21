@@ -1,7 +1,6 @@
 package io.github.project.vault.data.repository
 
 import android.content.Context
-import android.os.Environment
 import io.github.project.vault.core.cloud.GoogleDriveManager
 import io.github.project.vault.core.root.RootShell
 import io.github.project.vault.data.model.BackupMetadata
@@ -16,9 +15,12 @@ class BackupRepository(private val context: Context) {
 
     companion object {
         private val metadataCache = ConcurrentHashMap<String, BackupMetadata>()
+        @Volatile
+        private var cachedBackupList: List<BackupMetadata>? = null
 
         fun invalidateCache() {
             metadataCache.clear()
+            cachedBackupList = null
         }
     }
 
@@ -27,24 +29,40 @@ class BackupRepository(private val context: Context) {
         return dir
     }
 
-    suspend fun getLocalBackups(): List<BackupMetadata> = withContext(Dispatchers.IO) {
-        val backupDir = getBackupDirectory()
-        RootShell.execute("mkdir -p ${backupDir.absolutePath}")
+    fun getCachedBackups(): List<BackupMetadata>? = cachedBackupList
 
-        // List files via root to bypass any Scoped Storage blocks
-        val listResult = RootShell.execute("ls -1 ${backupDir.absolutePath}/*.vault 2>/dev/null")
-        if (!listResult.isSuccess || listResult.stdout.isBlank()) {
-            return@withContext emptyList()
+    suspend fun getLocalBackups(forceRefresh: Boolean = false): List<BackupMetadata> = withContext(Dispatchers.IO) {
+        if (!forceRefresh && cachedBackupList != null) {
+            return@withContext cachedBackupList!!
         }
 
-        val filePaths = listResult.stdout.lines().map { it.trim() }.filter { it.endsWith(".vault") }
-        filePaths.mapNotNull { path ->
+        val backupDir = getBackupDirectory()
+
+        // Fast native file listing first (0ms, no su process spawn)
+        val directFiles = backupDir.listFiles { file -> file.extension == "vault" }
+        val filePaths = if (directFiles != null) {
+            directFiles.map { it.absolutePath }
+        } else {
+            // Fallback to root shell if standard file access fails
+            RootShell.execute("mkdir -p ${backupDir.absolutePath}")
+            val listResult = RootShell.execute("ls -1 ${backupDir.absolutePath}/*.vault 2>/dev/null")
+            if (!listResult.isSuccess || listResult.stdout.isBlank()) {
+                emptyList()
+            } else {
+                listResult.stdout.lines().map { it.trim() }.filter { it.endsWith(".vault") }
+            }
+        }
+
+        val backups = filePaths.mapNotNull { path ->
             val file = File(path)
             val cacheKey = "${file.absolutePath}_${file.length()}"
             metadataCache[cacheKey] ?: parseMetadataFromArchive(file)?.also {
                 metadataCache[cacheKey] = it
             }
         }.sortedByDescending { it.backupTimestamp }
+
+        cachedBackupList = backups
+        backups
     }
 
     private suspend fun parseMetadataFromArchive(file: File): BackupMetadata? {
@@ -95,6 +113,9 @@ class BackupRepository(private val context: Context) {
     suspend fun deleteBackup(archiveFileName: String): Boolean = withContext(Dispatchers.IO) {
         val filePath = "${getBackupDirectory().absolutePath}/$archiveFileName"
         val result = RootShell.execute("rm -f $filePath")
+        if (result.isSuccess) {
+            invalidateCache()
+        }
         result.isSuccess
     }
 

@@ -80,10 +80,10 @@ fun AppListScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    var isRooted by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(true) }
-    var apps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
-    var backupCount by remember { mutableStateOf(0) }
+    var isRooted by remember { mutableStateOf(RootShell.isRootAvailableSync() ?: true) }
+    var apps by remember { mutableStateOf(AppRepository.getCachedApps() ?: emptyList()) }
+    var isLoading by remember { mutableStateOf(apps.isEmpty()) }
+    var backupCount by remember { mutableStateOf(backupRepository.getCachedBackups()?.size ?: 0) }
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf(AppFilter.USER) }
     val selectedPackages = remember { mutableStateListOf<String>() }
@@ -92,19 +92,22 @@ fun AppListScreen(
     var targetBackupApps by remember { mutableStateOf<List<AppInfo>?>(null) }
     var activeProgress by remember { mutableStateOf<BackupProgress?>(null) }
 
-    suspend fun reloadApps() {
-        isLoading = apps.isEmpty()
-        isRooted = RootShell.isRootAvailable()
-        backupCount = runCatching { backupRepository.getLocalBackups().size }.getOrDefault(0)
-        val fastList = appRepository.getInstalledAppsFast(includeSystem = true)
-        apps = fastList
-        isLoading = false
-        val enriched = appRepository.enrichWithBackupStatus(fastList)
+    suspend fun reloadApps(forceRefresh: Boolean = false) {
+        if (apps.isEmpty()) {
+            isLoading = true
+        }
+        val count = runCatching { backupRepository.getLocalBackups(forceRefresh).size }.getOrDefault(0)
+        backupCount = count
+        val fastList = appRepository.getInstalledAppsFast(includeSystem = true, forceRefresh = forceRefresh)
+        val enriched = appRepository.enrichWithBackupStatus(fastList, forceRefresh = forceRefresh)
         apps = enriched
+        isLoading = false
     }
 
     LaunchedEffect(Unit) {
-        reloadApps()
+        if (apps.isEmpty()) {
+            reloadApps(forceRefresh = false)
+        }
     }
 
     val userAppsCount = remember(apps) { apps.count { !it.isSystemApp } }
@@ -185,7 +188,7 @@ fun AppListScreen(
                             }
                         }
 
-                        IconButton(onClick = { scope.launch { reloadApps() } }) {
+                        IconButton(onClick = { scope.launch { reloadApps(forceRefresh = true) } }) {
                             Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                         }
                     }
@@ -388,7 +391,9 @@ fun AppListScreen(
                     }
                     activeProgress = null
                     selectedPackages.clear()
-                    reloadApps()
+                    BackupRepository.invalidateCache()
+                    AppRepository.invalidateCache()
+                    reloadApps(forceRefresh = true)
                 }
             }
         )

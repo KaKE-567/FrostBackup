@@ -1,6 +1,7 @@
 package io.github.project.vault.ui.components
 
 import android.graphics.Bitmap
+import androidx.collection.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -30,6 +31,15 @@ import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+object AppIconCache {
+    private val memoryCache = LruCache<String, ImageBitmap>(350)
+
+    fun get(packageName: String): ImageBitmap? = memoryCache.get(packageName)
+    fun put(packageName: String, bitmap: ImageBitmap) {
+        memoryCache.put(packageName, bitmap)
+    }
+}
+
 @Composable
 fun AppIcon(
     packageName: String,
@@ -37,20 +47,30 @@ fun AppIcon(
     size: Dp = 46.dp
 ) {
     val context = LocalContext.current
-    var bitmap by remember(packageName) { mutableStateOf<ImageBitmap?>(null) }
+    var bitmap by remember(packageName) { mutableStateOf(AppIconCache.get(packageName)) }
 
-    LaunchedEffect(packageName) {
-        withContext(Dispatchers.IO) {
-            val bmp = runCatching {
-                val drawable = context.packageManager.getApplicationIcon(packageName)
-                val b = drawable.toBitmap(
-                    width = 128,
-                    height = 128,
-                    config = Bitmap.Config.ARGB_8888
-                )
-                b.asImageBitmap()
-            }.getOrNull()
-            bitmap = bmp
+    if (bitmap == null) {
+        LaunchedEffect(packageName) {
+            withContext(Dispatchers.IO) {
+                val cached = AppIconCache.get(packageName)
+                if (cached != null) {
+                    bitmap = cached
+                    return@withContext
+                }
+                val bmp = runCatching {
+                    val drawable = context.packageManager.getApplicationIcon(packageName)
+                    val b = drawable.toBitmap(
+                        width = 100,
+                        height = 100,
+                        config = Bitmap.Config.ARGB_8888
+                    )
+                    b.asImageBitmap()
+                }.getOrNull()
+                if (bmp != null) {
+                    AppIconCache.put(packageName, bmp)
+                    bitmap = bmp
+                }
+            }
         }
     }
 
