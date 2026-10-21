@@ -1,7 +1,9 @@
 package io.github.project.vault.core.cloud
 
+import androidx.compose.runtime.Immutable
 import java.io.File
 
+@Immutable
 data class CloudBackupItem(
     val fileId: String,
     val name: String,

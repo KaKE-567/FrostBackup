@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import io.github.project.vault.core.cloud.OAuthManager
@@ -133,7 +134,16 @@ class MainActivity : ComponentActivity() {
                                                 onClick = {
                                                     if (pagerState.currentPage != index) {
                                                         pagerScope.launch {
-                                                            pagerState.animateScrollToPage(index)
+                                                            if (kotlin.math.abs(pagerState.currentPage - index) > 1) {
+                                                                pagerState.scrollToPage(if (index > pagerState.currentPage) index - 1 else index + 1)
+                                                            }
+                                                            pagerState.animateScrollToPage(
+                                                                page = index,
+                                                                animationSpec = tween(
+                                                                    durationMillis = 260,
+                                                                    easing = FastOutSlowInEasing
+                                                                )
+                                                            )
                                                         }
                                                     }
                                                 },
@@ -149,8 +159,8 @@ class MainActivity : ComponentActivity() {
                                     state = pagerState,
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .padding(innerPadding),
-                                    beyondBoundsPageCount = 1
+                                        .padding(innerPadding)
+                                        .graphicsLayer { clip = true }
                                 ) { page ->
                                     when (page) {
                                         0 -> AppListScreen(appRepository = appRepository, backupRepository = backupRepository)
