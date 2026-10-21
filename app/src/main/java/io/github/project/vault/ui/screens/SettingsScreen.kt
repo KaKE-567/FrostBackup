@@ -70,7 +70,9 @@ import io.github.project.vault.data.repository.AppRepository
 import io.github.project.vault.data.repository.BackupRepository
 import io.github.project.vault.ui.components.StatusBadge
 import io.github.project.vault.ui.theme.ThemeMode
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,19 +96,28 @@ fun SettingsScreen(
     var customPathInput by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
-        val targets = StorageLocationManager.getAvailableStorageTargets(context)
-        availableTargets = targets
-        currentStoragePath = backupRepository.getBackupDirectory().absolutePath
-        isRooted = RootShell.isRootAvailable()
-        if (isRooted) {
-            val idRes = RootShell.execute("id")
-            rootInfo = idRes.stdout.ifBlank { "Root Available" }
+        withContext(Dispatchers.IO) {
+            val targets = StorageLocationManager.getAvailableStorageTargets(context)
+            val currentPath = backupRepository.getBackupDirectory().absolutePath
+            val rootAvailable = RootShell.isRootAvailable()
+            val idOutput = if (rootAvailable) {
+                RootShell.execute("id").stdout.ifBlank { "Root Available" }
+            } else {
+                "No root access granted"
+            }
+            val selinuxOutput = if (rootAvailable) {
+                RootShell.execute("getenforce").stdout.ifBlank { "Unknown" }
+            } else {
+                "Unknown"
+            }
 
-            val selinuxRes = RootShell.execute("getenforce")
-            selinuxMode = selinuxRes.stdout.ifBlank { "Unknown" }
-        } else {
-            rootInfo = "No root access granted"
-            selinuxMode = "Unknown"
+            withContext(Dispatchers.Main) {
+                availableTargets = targets
+                currentStoragePath = currentPath
+                isRooted = rootAvailable
+                rootInfo = idOutput
+                selinuxMode = selinuxOutput
+            }
         }
     }
 

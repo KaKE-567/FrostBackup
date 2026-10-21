@@ -128,19 +128,16 @@ class MainActivity : ComponentActivity() {
                                         }
                                     ) {
                                         screens.forEachIndexed { index, screen ->
-                                            val selected = pagerState.currentPage == index
+                                            val selected = (if (pagerState.isScrollInProgress) pagerState.targetPage else pagerState.currentPage) == index
                                             NavigationBarItem(
                                                 selected = selected,
                                                 onClick = {
                                                     if (pagerState.currentPage != index) {
                                                         pagerScope.launch {
-                                                            if (kotlin.math.abs(pagerState.currentPage - index) > 1) {
-                                                                pagerState.scrollToPage(if (index > pagerState.currentPage) index - 1 else index + 1)
-                                                            }
                                                             pagerState.animateScrollToPage(
                                                                 page = index,
                                                                 animationSpec = tween(
-                                                                    durationMillis = 260,
+                                                                    durationMillis = 280,
                                                                     easing = FastOutSlowInEasing
                                                                 )
                                                             )
@@ -157,6 +154,7 @@ class MainActivity : ComponentActivity() {
                             ) { innerPadding ->
                                 HorizontalPager(
                                     state = pagerState,
+                                    beyondBoundsPageCount = screens.size - 1,
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .padding(innerPadding)

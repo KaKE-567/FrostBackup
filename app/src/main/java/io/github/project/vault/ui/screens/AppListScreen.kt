@@ -1,6 +1,7 @@
 package io.github.project.vault.ui.screens
 
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -24,8 +24,6 @@ import androidx.compose.material.icons.filled.RemoveDone
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -34,6 +32,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -47,11 +46,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.project.vault.core.backup.BackupEngine
 import io.github.project.vault.core.backup.BackupProgress
@@ -243,60 +244,72 @@ fun AppListScreen(
                     )
                 }
 
-                // Filter Carousel Row
+                // Filter Segment Row
                 item(key = "filter_chips") {
-                    val chipColors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f),
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        selectedLeadingIconColor = MaterialTheme.colorScheme.primary,
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.40f),
-                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        iconColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        FilterChip(
-                            selected = selectedFilter == AppFilter.USER,
-                            onClick = { selectedFilter = AppFilter.USER },
-                            label = { Text("User ($userAppsCount)") },
-                            leadingIcon = if (selectedFilter == AppFilter.USER) {
-                                { Icon(Icons.Default.Check, contentDescription = null) }
-                            } else null,
-                            colors = chipColors
+                        val filters = listOf(
+                            Triple(AppFilter.USER, "User", userAppsCount),
+                            Triple(AppFilter.BACKED_UP, "Backed", backedUpCount),
+                            Triple(AppFilter.SYSTEM, "System", systemAppsCount),
+                            Triple(AppFilter.ALL, "All", apps.size)
                         )
 
-                        FilterChip(
-                            selected = selectedFilter == AppFilter.BACKED_UP,
-                            onClick = { selectedFilter = AppFilter.BACKED_UP },
-                            label = { Text("Backed ($backedUpCount)") },
-                            leadingIcon = if (selectedFilter == AppFilter.BACKED_UP) {
-                                { Icon(Icons.Default.Check, contentDescription = null) }
-                            } else null,
-                            colors = chipColors
-                        )
-
-                        FilterChip(
-                            selected = selectedFilter == AppFilter.SYSTEM,
-                            onClick = { selectedFilter = AppFilter.SYSTEM },
-                            label = { Text("System ($systemAppsCount)") },
-                            leadingIcon = if (selectedFilter == AppFilter.SYSTEM) {
-                                { Icon(Icons.Default.Check, contentDescription = null) }
-                            } else null,
-                            colors = chipColors
-                        )
-
-                        FilterChip(
-                            selected = selectedFilter == AppFilter.ALL,
-                            onClick = { selectedFilter = AppFilter.ALL },
-                            label = { Text("All (${apps.size})") },
-                            leadingIcon = if (selectedFilter == AppFilter.ALL) {
-                                { Icon(Icons.Default.Check, contentDescription = null) }
-                            } else null,
-                            colors = chipColors
-                        )
+                        filters.forEach { (filter, title, count) ->
+                            val isSelected = selectedFilter == filter
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { selectedFilter = filter },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isSelected) {
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f)
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.40f)
+                                },
+                                border = BorderStroke(
+                                    width = if (isSelected) 1.5.dp else 1.dp,
+                                    color = if (isSelected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
+                                    }
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp, horizontal = 2.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = count.toString(),
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = if (isSelected) {
+                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
+                                        maxLines = 1
+                                    )
+                                    Text(
+                                        text = title,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                                        color = if (isSelected) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
