@@ -73,6 +73,7 @@ class MainActivity : ComponentActivity() {
 
                     Scaffold(
                         containerColor = Color.Transparent,
+                        contentColor = MaterialTheme.colorScheme.onBackground,
                         bottomBar = {
                             val outlineColor = MaterialTheme.colorScheme.outline
                             NavigationBar(

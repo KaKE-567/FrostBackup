@@ -96,16 +96,20 @@ fun CloudScreen(
 
     Scaffold(
         containerColor = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onBackground,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         text = "Cloud Synchronization",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.80f)
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.80f),
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    actionIconContentColor = MaterialTheme.colorScheme.onSurface
                 ),
                 modifier = Modifier.drawBehind {
                     drawLine(
@@ -287,7 +291,10 @@ fun CloudScreen(
                         items(cloudBackups, key = { it.fileId }) { item ->
                             Card(
                                 shape = RoundedCornerShape(20.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                    contentColor = MaterialTheme.colorScheme.onSurface
+                                ),
                                 border = BorderStroke(1.dp, outlineColor.copy(alpha = 0.20f)),
                                 elevation = CardDefaults.cardElevation(1.dp),
                                 modifier = Modifier.fillMaxWidth()
@@ -301,7 +308,8 @@ fun CloudScreen(
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = item.name,
-                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                            color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Text(
                                             text = String.format("%.1f MB", item.sizeBytes / (1024.0 * 1024.0)),
