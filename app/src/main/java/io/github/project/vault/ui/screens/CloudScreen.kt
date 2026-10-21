@@ -23,7 +23,6 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -34,12 +33,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -76,8 +73,6 @@ fun CloudScreen(
     var isConnected by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(true) }
     var cloudBackups by remember { mutableStateOf<List<CloudBackupItem>>(emptyList()) }
-    var showCustomClientDialog by remember { mutableStateOf(false) }
-    var customClientIdInput by remember { mutableStateOf("") }
 
     suspend fun refreshCloudState() {
         isLoading = true
@@ -185,7 +180,7 @@ fun CloudScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        text = "Universal Browser Authentication: Works smoothly on Vanilla AOSP ROMs without Google Play Services, LineageOS, GrapheneOS, or stock devices. Zero token copy-pasting required.",
+                        text = "Encrypted backups are stored inside your private Google Drive AppData folder. Operates completely in-browser without requiring Google Play Services or token copy-pasting.",
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isConnected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -193,10 +188,15 @@ fun CloudScreen(
                     Spacer(modifier = Modifier.height(18.dp))
 
                     if (!isConnected) {
-                        // Universal In-Browser OAuth Button
+                        // 1-Tap Browser Sign In
                         Button(
                             onClick = {
-                                OAuthManager.startBrowserAuth(context, customClientIdInput.ifBlank { null })
+                                OAuthManager.startBrowserAuth(context) { success, msg ->
+                                    scope.launch {
+                                        refreshCloudState()
+                                        snackbarHostState.showSnackbar(msg ?: "Connected")
+                                    }
+                                }
                             },
                             shape = RoundedCornerShape(14.dp),
                             colors = ButtonDefaults.buttonColors(
@@ -209,21 +209,9 @@ fun CloudScreen(
                             Icon(Icons.Default.OpenInBrowser, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Sign in via Browser (Universal)",
+                                text = "Sign in with Google",
                                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
                             )
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Custom Client ID toggle for power users
-                        TextButton(
-                            onClick = { showCustomClientDialog = true },
-                            modifier = Modifier.align(Alignment.CenterHorizontally)
-                        ) {
-                            Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Configure Custom Client ID (Optional)", style = MaterialTheme.typography.labelMedium)
                         }
                     } else {
                         OutlinedButton(
@@ -342,37 +330,5 @@ fun CloudScreen(
                 }
             }
         }
-    }
-
-    // Custom Client ID dialog for advanced users
-    if (showCustomClientDialog) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showCustomClientDialog = false },
-            title = { Text("Custom OAuth Client ID") },
-            text = {
-                Column {
-                    Text("By default, FrostBackup uses its built-in open-source client ID. If you have your own Google Cloud Console client ID, paste it below:")
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = customClientIdInput,
-                        onValueChange = { customClientIdInput = it },
-                        label = { Text("Client ID (.apps.googleusercontent.com)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { showCustomClientDialog = false }
-                ) {
-                    Text("Save")
-                }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { showCustomClientDialog = false }) {
-                    Text("Done")
-                }
-            }
-        )
     }
 }
