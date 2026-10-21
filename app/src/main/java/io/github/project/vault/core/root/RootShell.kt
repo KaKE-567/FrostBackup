@@ -5,6 +5,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.BufferedReader
 import java.io.DataOutputStream
+import java.io.File
 import java.io.InputStreamReader
 
 object RootShell {
@@ -21,10 +22,21 @@ object RootShell {
         isRoot
     }
 
+    private fun getSuExecutable(): String {
+        val candidates = listOf(
+            "/system/bin/su",
+            "/system/xbin/su",
+            "/sbin/su",
+            "su"
+        )
+        return candidates.firstOrNull { File(it).canExecute() } ?: "su"
+    }
+
     suspend fun execute(command: String, timeoutMs: Long = 60_000L): ShellResult = withContext(Dispatchers.IO) {
         val timedResult = withTimeoutOrNull(timeoutMs) {
             try {
-                val process = ProcessBuilder("su").start()
+                val suBinary = getSuExecutable()
+                val process = ProcessBuilder(suBinary).start()
                 val os = DataOutputStream(process.outputStream)
                 val stdoutReader = BufferedReader(InputStreamReader(process.inputStream))
                 val stderrReader = BufferedReader(InputStreamReader(process.errorStream))

@@ -1,5 +1,7 @@
 package io.github.project.vault.ui.screens
 
+import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -19,15 +21,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -43,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -54,30 +61,56 @@ import io.github.project.vault.ui.components.StatusBadge
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+private fun restartAppProcess(context: Context) {
+    val pm = context.packageManager
+    val intent = pm.getLaunchIntentForPackage(context.packageName)?.apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+    }
+    if (intent != null) {
+        context.startActivity(intent)
+    }
+    android.os.Process.killProcess(android.os.Process.myPid())
+    kotlin.system.exitProcess(0)
+}
+
 @Composable
 fun RootGateScreen(
     onRootGranted: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var isChecking by remember { mutableStateOf(true) }
     var rootStatusText by remember { mutableStateOf("Checking superuser access…") }
     var isRooted by remember { mutableStateOf(false) }
 
+    val ksuPackage = "me.weishu.kernelsu"
+    val hasKsu = remember {
+        try {
+            context.packageManager.getPackageInfo(ksuPackage, 0) != null
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     fun checkRoot() {
         scope.launch {
             isChecking = true
-            rootStatusText = "Requesting superuser authorization…"
+            rootStatusText = "Testing superuser privileges…"
             val hasRoot = RootShell.isRootAvailable(forceCheck = true)
             isChecking = false
             isRooted = hasRoot
 
             if (hasRoot) {
                 rootStatusText = "Root access granted! Unlocking FrostBackup…"
-                delay(600)
+                delay(400)
                 onRootGranted()
             } else {
-                rootStatusText = "Superuser access not granted yet"
+                rootStatusText = if (hasKsu) {
+                    "Superuser not granted yet. If you just toggled it in KernelSU, tap 'Relaunch App to Apply' below."
+                } else {
+                    "Superuser access not granted yet. Please allow root access to continue."
+                }
             }
         }
     }
@@ -87,7 +120,7 @@ fun RootGateScreen(
         checkRoot()
     }
 
-    // Auto-detect when returning from KernelSU, Magisk, or APatch manager
+    // Auto-detect when returning from KernelSU or Magisk manager
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -120,7 +153,7 @@ fun RootGateScreen(
             // Shield & Lock Branding Icon with Glow Ring
             Box(
                 modifier = Modifier
-                    .size(96.dp)
+                    .size(92.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)),
                 contentAlignment = Alignment.Center
@@ -129,14 +162,14 @@ fun RootGateScreen(
                     imageVector = Icons.Default.AdminPanelSettings,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(54.dp)
+                    modifier = Modifier.size(52.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             Text(
-                text = "Root Privilege Required",
+                text = "Superuser Permission Required",
                 style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onBackground,
                 textAlign = TextAlign.Center
@@ -145,13 +178,13 @@ fun RootGateScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "FrostBackup is an advanced root utility. It requires superuser privileges to access protected app packages, decrypt Keystore tokens, and preserve SSAID login sessions across reinstalls.",
+                text = "FrostBackup requires root privileges to backup protected app data, migrate hardware Keystore tokens, and retain login sessions.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             // Root Status Card (Frosted Glass)
             Card(
@@ -179,7 +212,7 @@ fun RootGateScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Superuser Status",
+                            text = "Root Status",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -212,48 +245,72 @@ fun RootGateScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Action Buttons
+            // KernelSU Quick Relaunch Button (Solves KernelSU process restart requirement)
             Button(
-                onClick = { checkRoot() },
-                enabled = !isChecking,
+                onClick = { restartAppProcess(context) },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp)
             ) {
-                if (isChecking) {
-                    CircularProgressIndicator(
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text("Verifying…")
-                } else {
-                    Icon(Icons.Default.CheckCircle, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(if (isRooted) "Continue to FrostBackup" else "Request Root Access")
-                }
+                Icon(Icons.Default.Bolt, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("⚡ Relaunch App to Apply Root (KernelSU)", fontWeight = FontWeight.Bold)
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
+            // Refresh / Test Button
             OutlinedButton(
                 onClick = { checkRoot() },
                 enabled = !isChecking,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp)
+                    .height(48.dp)
             ) {
-                Icon(Icons.Default.Refresh, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Refresh / Check Again")
+                if (isChecking) {
+                    CircularProgressIndicator(
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Checking…")
+                } else {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Check Root Status Again")
+                }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            // Direct shortcut to KernelSU Manager if installed
+            if (hasKsu) {
+                Spacer(modifier = Modifier.height(10.dp))
+                FilledTonalButton(
+                    onClick = {
+                        val launchIntent = context.packageManager.getLaunchIntentForPackage(ksuPackage)
+                        if (launchIntent != null) {
+                            context.startActivity(launchIntent)
+                        }
+                    },
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                ) {
+                    Icon(Icons.Default.OpenInNew, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Open KernelSU Manager")
+                }
+            }
 
-            // KernelSU / APatch / Magisk Tip Card
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Explanatory Tip Card
             Card(
                 shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(
@@ -271,18 +328,18 @@ fun RootGateScreen(
                         imageVector = Icons.Default.Info,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = "Using KernelSU or APatch?",
+                            text = "KernelSU Instructions",
                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "1. Open your KernelSU / APatch manager app.\n2. In the Superuser tab, grant root access to FrostBackup.\n3. Return here and tap 'Refresh' (or it will auto-detect instantly).",
+                            text = "1. Tap 'Open KernelSU Manager' above (or open KernelSU manually).\n2. In Superuser, toggle FrostBackup ON.\n3. Return here and tap '⚡ Relaunch App to Apply Root'.\nThe app will restart in 100ms with root active!",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
