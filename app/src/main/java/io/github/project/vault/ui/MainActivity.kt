@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
@@ -15,8 +16,11 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -26,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -33,11 +38,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
-import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
 import io.github.project.vault.core.cloud.OAuthManager
 import io.github.project.vault.data.repository.AppRepository
 import io.github.project.vault.data.repository.BackupRepository
@@ -55,6 +55,7 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
+    @OptIn(ExperimentalFoundationApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -90,7 +91,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         } else {
-                            val navController = rememberNavController()
+                            val pagerScope = rememberCoroutineScope()
                             val backupRepository = remember { BackupRepository(applicationContext) }
                             val appRepository = remember { AppRepository(applicationContext, backupRepository) }
 
@@ -100,9 +101,13 @@ class MainActivity : ComponentActivity() {
                                 Screen.Cloud,
                                 Screen.Settings
                             )
+                            val pagerState = rememberPagerState(initialPage = 0, pageCount = { screens.size })
 
-                            val navBackStackEntry by navController.currentBackStackEntryAsState()
-                            val currentRoute = navBackStackEntry?.destination?.route
+                            BackHandler(enabled = pagerState.currentPage != 0) {
+                                pagerScope.launch {
+                                    pagerState.animateScrollToPage(0)
+                                }
+                            }
 
                             Scaffold(
                                 containerColor = Color.Transparent,
@@ -121,18 +126,14 @@ class MainActivity : ComponentActivity() {
                                             )
                                         }
                                     ) {
-                                        screens.forEach { screen ->
-                                            val selected = currentRoute == screen.route
+                                        screens.forEachIndexed { index, screen ->
+                                            val selected = pagerState.currentPage == index
                                             NavigationBarItem(
                                                 selected = selected,
                                                 onClick = {
-                                                    if (currentRoute != screen.route) {
-                                                        navController.navigate(screen.route) {
-                                                            popUpTo(navController.graph.findStartDestination().id) {
-                                                                saveState = true
-                                                            }
-                                                            launchSingleTop = true
-                                                            restoreState = true
+                                                    if (pagerState.currentPage != index) {
+                                                        pagerScope.launch {
+                                                            pagerState.animateScrollToPage(index)
                                                         }
                                                     }
                                                 },
@@ -144,26 +145,18 @@ class MainActivity : ComponentActivity() {
                                 },
                                 modifier = Modifier.fillMaxSize()
                             ) { innerPadding ->
-                                NavHost(
-                                    navController = navController,
-                                    startDestination = Screen.Apps.route,
-                                    modifier = Modifier.padding(innerPadding),
-                                    enterTransition = { fadeIn(animationSpec = tween(280, easing = FastOutSlowInEasing)) },
-                                    exitTransition = { fadeOut(animationSpec = tween(200, easing = FastOutSlowInEasing)) },
-                                    popEnterTransition = { fadeIn(animationSpec = tween(280, easing = FastOutSlowInEasing)) },
-                                    popExitTransition = { fadeOut(animationSpec = tween(200, easing = FastOutSlowInEasing)) }
-                                ) {
-                                    composable(Screen.Apps.route) {
-                                        AppListScreen(appRepository = appRepository, backupRepository = backupRepository)
-                                    }
-                                    composable(Screen.Restore.route) {
-                                        RestoreScreen(backupRepository = backupRepository)
-                                    }
-                                    composable(Screen.Cloud.route) {
-                                        CloudScreen(backupRepository = backupRepository)
-                                    }
-                                    composable(Screen.Settings.route) {
-                                        SettingsScreen(
+                                HorizontalPager(
+                                    state = pagerState,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(innerPadding),
+                                    beyondViewportPageCount = 1
+                                ) { page ->
+                                    when (page) {
+                                        0 -> AppListScreen(appRepository = appRepository, backupRepository = backupRepository)
+                                        1 -> RestoreScreen(backupRepository = backupRepository)
+                                        2 -> CloudScreen(backupRepository = backupRepository)
+                                        3 -> SettingsScreen(
                                             backupRepository = backupRepository,
                                             currentThemeMode = currentThemeMode,
                                             onThemeChanged = { newMode ->
@@ -189,15 +182,12 @@ class MainActivity : ComponentActivity() {
     private fun handleOAuthIntent(intent: Intent?) {
         val uri = intent?.data ?: return
         if (uri.scheme == "io.github.project.vault" && uri.host == "oauth2redirect") {
-            val code = uri.getQueryParameter("code")
-            if (!code.isNullOrBlank()) {
-                lifecycleScope.launch {
-                    val success = OAuthManager.handleAuthCode(applicationContext, code)
-                    if (success) {
-                        Toast.makeText(applicationContext, "Successfully connected to Google Drive!", Toast.LENGTH_LONG).show()
-                    } else {
-                        Toast.makeText(applicationContext, "Google authentication failed", Toast.LENGTH_SHORT).show()
-                    }
+            lifecycleScope.launch {
+                val success = OAuthManager.handleOAuthResponse(this@MainActivity, uri)
+                if (success) {
+                    Toast.makeText(this@MainActivity, "Google Drive connected successfully", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this@MainActivity, "Failed to connect Google Drive", Toast.LENGTH_LONG).show()
                 }
             }
         }
