@@ -22,4 +22,14 @@ data class BackupMetadata(
     val hasKeystore: Boolean = false,
     val archiveFileName: String,
     val archiveSizeBytes: Long = 0L
-)
+) {
+    companion object {
+        fun extractAppSlugFromArchive(fileName: String): String {
+            return fileName.removeSuffix(".vault")
+                .replace("_[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}$".toRegex(), "")
+                .replace("-[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}$".toRegex(), "")
+                .replace("_[0-9]{10,15}$".toRegex(), "")
+                .replace("-[0-9]{10,15}$".toRegex(), "")
+        }
+    }
+}

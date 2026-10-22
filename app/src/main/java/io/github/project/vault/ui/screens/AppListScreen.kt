@@ -107,6 +107,7 @@ enum class AppFilter { USER, BACKED_UP, SYSTEM, ALL }
 fun AppListScreen(
     appRepository: AppRepository,
     backupRepository: BackupRepository,
+    isSelected: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -121,17 +122,30 @@ fun AppListScreen(
     val backupCount = backups.size
 
     val backupMap = remember(backups) {
-        backups.associateBy { it.packageName.trim().lowercase() }
+        val map = mutableMapOf<String, BackupMetadata>()
+        for (b in backups) {
+            val pkg = b.packageName.trim().lowercase()
+            if (pkg.isNotBlank()) map.putIfAbsent(pkg, b)
+            val slug = BackupMetadata.extractAppSlugFromArchive(b.archiveFileName).lowercase().replace("-", "_")
+            if (slug.isNotBlank()) map.putIfAbsent(slug, b)
+        }
+        map
     }
 
     val apps = remember(rawApps, backupMap, backups) {
         rawApps.map { app ->
             val pkgKey = app.packageName.trim().lowercase()
-            val backup = backupMap[pkgKey] ?: backups.find { b ->
-                val cleanBackupSlug = b.archiveFileName.substringBeforeLast("_").lowercase().replace("-", "_")
-                val cleanAppSlug = app.appName.trim().lowercase().replace("\\s+".toRegex(), "_").replace("[^a-z0-9_-]".toRegex(), "")
-                cleanBackupSlug.isNotEmpty() && (cleanBackupSlug == cleanAppSlug || b.packageName.equals(app.packageName, ignoreCase = true))
-            }
+            val cleanAppSlug = app.appName.trim().lowercase().replace("\\s+".toRegex(), "_").replace("[^a-z0-9_]".toRegex(), "")
+            val cleanPkgSlug = pkgKey.substringAfterLast(".").replace("[^a-z0-9_]".toRegex(), "")
+
+            val backup = backupMap[pkgKey]
+                ?: backupMap[cleanAppSlug]
+                ?: (if (cleanPkgSlug.isNotBlank()) backupMap[cleanPkgSlug] else null)
+                ?: backups.find { b ->
+                    val cleanBackupSlug = BackupMetadata.extractAppSlugFromArchive(b.archiveFileName).lowercase().replace("-", "_")
+                    (cleanBackupSlug.isNotEmpty() && (cleanBackupSlug == cleanAppSlug || cleanBackupSlug == cleanPkgSlug)) ||
+                    b.packageName.trim().equals(app.packageName.trim(), ignoreCase = true)
+                }
 
             if (backup != null) {
                 app.copy(hasBackup = true, lastBackupTimestamp = backup.backupTimestamp)
@@ -179,6 +193,12 @@ fun AppListScreen(
                 availableTargets = targets
                 currentStorageDirectory = currentDir
             }
+        }
+    }
+
+    LaunchedEffect(isSelected) {
+        if (isSelected) {
+            reloadApps(forceRefresh = true)
         }
     }
 

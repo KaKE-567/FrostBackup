@@ -8,6 +8,7 @@ import android.os.Build
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
 import io.github.project.vault.data.model.AppInfo
+import io.github.project.vault.data.model.BackupMetadata
 import io.github.project.vault.ui.components.AppIconCache
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -105,9 +106,29 @@ class AppRepository(
             return@withContext cachedEnrichedApps!!
         }
 
-        val backupMap = backupRepository.getLocalBackups(forceRefresh).associateBy { it.packageName }
+        val backups = backupRepository.getLocalBackups(forceRefresh)
+        val backupMap = mutableMapOf<String, BackupMetadata>()
+        for (b in backups) {
+            val pkg = b.packageName.trim().lowercase()
+            if (pkg.isNotBlank()) map.putIfAbsent(pkg, b)
+            val slug = BackupMetadata.extractAppSlugFromArchive(b.archiveFileName).lowercase().replace("-", "_")
+            if (slug.isNotBlank()) map.putIfAbsent(slug, b)
+        }
+
         val enriched = apps.map { app ->
-            val backup = backupMap[app.packageName]
+            val pkgKey = app.packageName.trim().lowercase()
+            val cleanAppSlug = app.appName.trim().lowercase().replace("\\s+".toRegex(), "_").replace("[^a-z0-9_]".toRegex(), "")
+            val cleanPkgSlug = pkgKey.substringAfterLast(".").replace("[^a-z0-9_]".toRegex(), "")
+
+            val backup = backupMap[pkgKey]
+                ?: backupMap[cleanAppSlug]
+                ?: (if (cleanPkgSlug.isNotBlank()) backupMap[cleanPkgSlug] else null)
+                ?: backups.find { b ->
+                    val cleanBackupSlug = BackupMetadata.extractAppSlugFromArchive(b.archiveFileName).lowercase().replace("-", "_")
+                    (cleanBackupSlug.isNotEmpty() && (cleanBackupSlug == cleanAppSlug || cleanBackupSlug == cleanPkgSlug)) ||
+                    b.packageName.trim().equals(app.packageName.trim(), ignoreCase = true)
+                }
+
             if (backup != null) {
                 app.copy(
                     hasBackup = true,

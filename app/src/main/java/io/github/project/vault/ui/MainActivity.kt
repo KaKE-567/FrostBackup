@@ -164,7 +164,11 @@ class MainActivity : ComponentActivity() {
                                         .graphicsLayer { clip = true }
                                 ) { page ->
                                     when (page) {
-                                        0 -> AppListScreen(appRepository = appRepository, backupRepository = backupRepository)
+                                        0 -> AppListScreen(
+                                            appRepository = appRepository,
+                                            backupRepository = backupRepository,
+                                            isSelected = (pagerState.currentPage == 0)
+                                        )
                                         1 -> RestoreScreen(
                                             backupRepository = backupRepository,
                                             isSelected = (pagerState.currentPage == 1)

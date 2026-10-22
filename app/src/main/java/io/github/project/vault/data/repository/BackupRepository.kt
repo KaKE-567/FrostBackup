@@ -17,7 +17,11 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 class BackupRepository(private val context: Context) {
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+        isLenient = true
+    }
 
     companion object {
         private val metadataCache = ConcurrentHashMap<String, BackupMetadata>()
@@ -114,7 +118,7 @@ class BackupRepository(private val context: Context) {
         }
 
         val result = RootShell.execute(
-            "tar -xf \"$path\" -O ./metadata.json 2>/dev/null || tar -xf \"$path\" -O metadata.json 2>/dev/null"
+            "tar -xf \"$path\" -O ./metadata.json 2>/dev/null || tar -xf \"$path\" -O metadata.json 2>/dev/null || tar -xOf \"$path\" ./metadata.json 2>/dev/null"
         )
         val sizeBytes = if (knownSize > 0L) knownSize else {
             val sizeResult = RootShell.execute("stat -c %s \"$path\" 2>/dev/null || wc -c < \"$path\"")
@@ -156,7 +160,7 @@ class BackupRepository(private val context: Context) {
             val isEncrypted = !isTar
 
             val name = file.nameWithoutExtension
-            val appSlug = name.substringBeforeLast("_").ifBlank { name }
+            val appSlug = BackupMetadata.extractAppSlugFromArchive(file.name).ifBlank { name }
             val appTitle = appSlug.replace("_", " ").replaceFirstChar { it.uppercase() }
 
             val parsedTimestamp = try {
@@ -182,6 +186,9 @@ class BackupRepository(private val context: Context) {
     }
 
     private fun resolvePackageNameFromSlug(slug: String): String? {
+        val cleanSlug = slug.trim().lowercase().replace("-", "_").replace("[^a-z0-9_]".toRegex(), "")
+        if (cleanSlug.isBlank()) return null
+
         return runCatching {
             val pm = context.packageManager
             val packages = pm.getInstalledPackages(0)
@@ -189,9 +196,15 @@ class BackupRepository(private val context: Context) {
                 val appName = pkg.applicationInfo?.loadLabel(pm)?.toString() ?: ""
                 val clean = appName.trim().lowercase()
                     .replace("\\s+".toRegex(), "_")
-                    .replace("[^a-z0-9_-]".toRegex(), "")
-                    .ifBlank { pkg.packageName.substringAfterLast(".").lowercase() }
-                if (clean.equals(slug, ignoreCase = true) || pkg.packageName.equals(slug, ignoreCase = true)) {
+                    .replace("[^a-z0-9_]".toRegex(), "")
+                val cleanPkg = pkg.packageName.trim().lowercase().replace("[^a-z0-9_]".toRegex(), "")
+                val cleanPkgTail = pkg.packageName.substringAfterLast(".").trim().lowercase().replace("[^a-z0-9_]".toRegex(), "")
+
+                if (clean == cleanSlug ||
+                    pkg.packageName.equals(cleanSlug, ignoreCase = true) ||
+                    cleanPkg == cleanSlug ||
+                    cleanPkgTail == cleanSlug
+                ) {
                     return@runCatching pkg.packageName
                 }
             }

@@ -1,6 +1,7 @@
 package io.github.project.vault.core.root
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.BufferedReader
@@ -38,27 +39,41 @@ object RootShell {
         val timedResult = withTimeoutOrNull(timeoutMs) {
             try {
                 val suBinary = getSuExecutable()
-                val process = ProcessBuilder(suBinary).start()
-                val os = DataOutputStream(process.outputStream)
-                val stdoutReader = BufferedReader(InputStreamReader(process.inputStream))
-                val stderrReader = BufferedReader(InputStreamReader(process.errorStream))
-
-                // Write command and exit
-                os.writeBytes("$command\n")
-                os.writeBytes("exit\n")
-                os.flush()
-
-                val stdout = stdoutReader.readText().trim()
-                val stderr = stderrReader.readText().trim()
+                val process = ProcessBuilder(suBinary, "-c", command).start()
+                val stdoutDeferred = async(Dispatchers.IO) {
+                    process.inputStream.bufferedReader().use { it.readText().trim() }
+                }
+                val stderrDeferred = async(Dispatchers.IO) {
+                    process.errorStream.bufferedReader().use { it.readText().trim() }
+                }
                 val exitCode = process.waitFor()
-
-                os.close()
-                stdoutReader.close()
-                stderrReader.close()
-
+                val stdout = stdoutDeferred.await()
+                val stderr = stderrDeferred.await()
                 ShellResult(exitCode, stdout, stderr)
             } catch (e: Exception) {
-                ShellResult(-1, "", e.message ?: "Execution error")
+                // Fallback to piping if direct su -c failed
+                try {
+                    val suBinary = getSuExecutable()
+                    val process = ProcessBuilder(suBinary).start()
+                    val os = DataOutputStream(process.outputStream)
+                    val stdoutDeferred = async(Dispatchers.IO) {
+                        process.inputStream.bufferedReader().use { it.readText().trim() }
+                    }
+                    val stderrDeferred = async(Dispatchers.IO) {
+                        process.errorStream.bufferedReader().use { it.readText().trim() }
+                    }
+                    os.writeBytes("$command\n")
+                    os.writeBytes("exit\n")
+                    os.flush()
+                    os.close()
+
+                    val exitCode = process.waitFor()
+                    val stdout = stdoutDeferred.await()
+                    val stderr = stderrDeferred.await()
+                    ShellResult(exitCode, stdout, stderr)
+                } catch (fallbackEx: Exception) {
+                    ShellResult(-1, "", fallbackEx.message ?: e.message ?: "Execution error")
+                }
             }
         }
         timedResult ?: ShellResult(-2, "", "Command timed out after ${timeoutMs}ms")
