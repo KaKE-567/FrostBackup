@@ -2,6 +2,7 @@ package io.github.project.vault.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -24,6 +26,8 @@ import androidx.compose.material.icons.filled.RemoveDone
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -244,10 +248,13 @@ fun AppListScreen(
                     )
                 }
 
-                // Filter Segment Row
+                // Native Material 3 Filter Chips Row
                 item(key = "filter_chips") {
+                    val chipScrollState = rememberScrollState()
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(chipScrollState),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         val filters = listOf(
@@ -259,56 +266,33 @@ fun AppListScreen(
 
                         filters.forEach { (filter, title, count) ->
                             val isSelected = selectedFilter == filter
-                            Surface(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable { selectedFilter = filter },
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (isSelected) {
-                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f)
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.40f)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { selectedFilter = filter },
+                                label = {
+                                    Text(
+                                        text = "$title ($count)",
+                                        style = MaterialTheme.typography.labelMedium.copy(
+                                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                        )
+                                    )
                                 },
-                                border = BorderStroke(
-                                    width = if (isSelected) 1.5.dp else 1.dp,
-                                    color = if (isSelected) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
-                                    }
+                                shape = RoundedCornerShape(8.dp),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = isSelected,
+                                    borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.20f),
+                                    selectedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.60f),
+                                    borderWidth = 1.dp,
+                                    selectedBorderWidth = 1.dp
                                 )
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp, horizontal = 2.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    Text(
-                                        text = count.toString(),
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = if (isSelected) {
-                                            MaterialTheme.colorScheme.onPrimaryContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurface
-                                        },
-                                        maxLines = 1
-                                    )
-                                    Text(
-                                        text = title,
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                                        color = if (isSelected) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
+                            )
                         }
                     }
                 }
