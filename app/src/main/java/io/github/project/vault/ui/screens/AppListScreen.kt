@@ -266,12 +266,12 @@ fun AppListScreen(
                         title = {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(38.dp)
-                                        .clip(RoundedCornerShape(10.dp))
+                                        .size(34.dp)
+                                        .clip(RoundedCornerShape(8.dp))
                                         .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -279,7 +279,7 @@ fun AppListScreen(
                                         painter = painterResource(R.drawable.ic_frost_brand_logo),
                                         contentDescription = "FrostBackup Logo",
                                         tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(24.dp)
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
                                 Column(verticalArrangement = Arrangement.Center) {
@@ -290,11 +290,13 @@ fun AppListScreen(
                                         Text(
                                             text = "Applications",
                                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                                            color = MaterialTheme.colorScheme.onSurface
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                         StatusBadge(
                                             text = if (isRooted) "Superuser" else "No Root",
-                                            containerColor = if (isRooted) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                                            containerColor = if (isRooted) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f),
                                             contentColor = if (isRooted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                                         )
                                     }
@@ -308,8 +310,10 @@ fun AppListScreen(
                                     }
                                     Text(
                                         text = subtitle,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
@@ -369,26 +373,6 @@ fun AppListScreen(
                                 }
                             }
 
-                            // Storage Location Selector (SD Card / Pendrive / Internal)
-                            IconButton(onClick = {
-                                scope.launch {
-                                    withContext(Dispatchers.IO) {
-                                        val targets = StorageLocationManager.getAvailableStorageTargets(context)
-                                        val currentDir = backupRepository.getBackupDirectory()
-                                        withContext(Dispatchers.Main) {
-                                            availableTargets = targets
-                                            currentStorageDirectory = currentDir
-                                            showStorageSheet = true
-                                        }
-                                    }
-                                }
-                            }) {
-                                Icon(
-                                    imageVector = Icons.Default.SdCard,
-                                    contentDescription = "Backup Storage Location"
-                                )
-                            }
-
                             // Multi-select / Deselect toggle
                             if (filteredApps.isNotEmpty()) {
                                 val allVisibleSelected = filteredApps.all { it.packageName in selectedPackages }
@@ -421,7 +405,40 @@ fun AppListScreen(
                                     onDismissRequest = { showMoreMenu = false }
                                 ) {
                                     DropdownMenuItem(
+                                        text = { Text("Storage Destination") },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.SdCard,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            scope.launch {
+                                                withContext(Dispatchers.IO) {
+                                                    val targets = StorageLocationManager.getAvailableStorageTargets(context)
+                                                    val currentDir = backupRepository.getBackupDirectory()
+                                                    withContext(Dispatchers.Main) {
+                                                        availableTargets = targets
+                                                        currentStorageDirectory = currentDir
+                                                        showStorageSheet = true
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    )
+                                    DropdownMenuItem(
                                         text = { Text("Select Unbacked Apps") },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.DoneAll,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        },
                                         onClick = {
                                             showMoreMenu = false
                                             filteredApps.filter { !it.hasBackup }.forEach {
@@ -430,7 +447,15 @@ fun AppListScreen(
                                         }
                                     )
                                     DropdownMenuItem(
-                                        text = { Text("Refresh List") },
+                                        text = { Text("Refresh Applications") },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.Refresh,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        },
                                         onClick = {
                                             showMoreMenu = false
                                             scope.launch { reloadApps(forceRefresh = true) }
