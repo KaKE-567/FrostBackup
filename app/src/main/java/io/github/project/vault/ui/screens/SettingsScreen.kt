@@ -69,6 +69,7 @@ import io.github.project.vault.data.model.StorageType
 import io.github.project.vault.data.repository.AppRepository
 import io.github.project.vault.data.repository.BackupRepository
 import io.github.project.vault.ui.components.StatusBadge
+import io.github.project.vault.ui.components.StorageSelectorSheet
 import io.github.project.vault.ui.theme.ThemeMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -92,8 +93,7 @@ fun SettingsScreen(
 
     var availableTargets by remember { mutableStateOf<List<StorageTarget>>(emptyList()) }
     var currentStoragePath by remember { mutableStateOf(backupRepository.getBackupDirectory().absolutePath) }
-    var showCustomPathDialog by remember { mutableStateOf(false) }
-    var customPathInput by remember { mutableStateOf("") }
+    var showStorageSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
@@ -282,128 +282,53 @@ fun SettingsScreen(
                 }
             }
 
-            // Backup Storage Location Card (Internal / MicroSD / USB Pendrive / Custom)
+            // Backup Storage Location Card
             Card(
                 shape = RoundedCornerShape(20.dp),
                 colors = glassCardColors,
                 border = frostedBorder,
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .clickable { showStorageSheet = true }
             ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.SdStorage,
+                            imageVector = Icons.Default.SdCard,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.secondary
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Backup Storage Location",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                            )
-                            Text(
-                                text = "Select Internal storage, MicroSD card, or USB Pendrive",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                     }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    if (availableTargets.isEmpty()) {
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Backup Storage Location",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        )
                         Text(
                             text = currentStoragePath,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
-                    } else {
-                        availableTargets.forEach { target ->
-                            val isSelected = currentStoragePath == target.backupDirectoryPath
-                            val targetIcon = when (target.type) {
-                                StorageType.INTERNAL -> Icons.Default.PhoneAndroid
-                                StorageType.SD_CARD -> Icons.Default.SdCard
-                                StorageType.USB_DRIVE -> Icons.Default.Usb
-                                StorageType.CUSTOM -> Icons.Default.Folder
-                            }
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(
-                                        if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                                        else Color.Transparent
-                                    )
-                                    .clickable {
-                                        currentStoragePath = target.backupDirectoryPath
-                                        backupRepository.setBackupDirectory(target.backupDirectoryPath)
-                                        AppRepository.invalidateCache()
-                                    }
-                                    .padding(horizontal = 8.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(
-                                    selected = isSelected,
-                                    onClick = {
-                                        currentStoragePath = target.backupDirectoryPath
-                                        backupRepository.setBackupDirectory(target.backupDirectoryPath)
-                                        AppRepository.invalidateCache()
-                                    }
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Icon(
-                                    imageVector = targetIcon,
-                                    contentDescription = null,
-                                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = target.name,
-                                        style = MaterialTheme.typography.bodyMedium.copy(
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                    )
-                                    Text(
-                                        text = target.backupDirectoryPath,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    if (target.totalBytes > 0) {
-                                        Text(
-                                            text = "${target.formattedFreeSpace} free of ${target.formattedTotalSpace}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                        }
                     }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    OutlinedButton(
-                        onClick = {
-                            customPathInput = currentStoragePath
-                            showCustomPathDialog = true
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Custom Storage Directory")
+                    IconButton(onClick = { showStorageSheet = true }) {
+                        Icon(Icons.Default.Edit, contentDescription = "Change Storage Location")
                     }
                 }
             }
@@ -479,55 +404,26 @@ fun SettingsScreen(
         }
     }
 
-    if (showCustomPathDialog) {
-        AlertDialog(
-            onDismissRequest = { showCustomPathDialog = false },
-            title = {
-                Text(
-                    text = "Custom Storage Directory",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                )
+    if (showStorageSheet) {
+        StorageSelectorSheet(
+            availableTargets = availableTargets,
+            currentStoragePath = currentStoragePath,
+            onSelectTarget = { target ->
+                currentStoragePath = target.backupDirectoryPath
+                backupRepository.setBackupDirectory(target.backupDirectoryPath)
+                AppRepository.invalidateCache()
+                showStorageSheet = false
             },
-            text = {
-                Column {
-                    Text(
-                        text = "Enter the directory path on your device, MicroSD card, or USB pendrive where backups will be stored:",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = customPathInput,
-                        onValueChange = { customPathInput = it },
-                        singleLine = true,
-                        placeholder = { Text("/storage/xxxx-xxxx/FrostBackup/Backups") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+            onCustomPathSelected = { path ->
+                currentStoragePath = path
+                backupRepository.setBackupDirectory(path)
+                AppRepository.invalidateCache()
+                scope.launch {
+                    availableTargets = StorageLocationManager.getAvailableStorageTargets(context)
                 }
+                showStorageSheet = false
             },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val trimmed = customPathInput.trim()
-                        if (trimmed.isNotBlank()) {
-                            currentStoragePath = trimmed
-                            backupRepository.setBackupDirectory(trimmed)
-                            AppRepository.invalidateCache()
-                            scope.launch {
-                                availableTargets = StorageLocationManager.getAvailableStorageTargets(context)
-                            }
-                        }
-                        showCustomPathDialog = false
-                    }
-                ) {
-                    Text("Save")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCustomPathDialog = false }) {
-                    Text("Cancel")
-                }
-            }
+            onDismissRequest = { showStorageSheet = false }
         )
     }
 }

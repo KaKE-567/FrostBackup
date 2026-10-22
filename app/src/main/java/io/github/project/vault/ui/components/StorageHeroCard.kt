@@ -43,22 +43,35 @@ import java.util.Locale
 fun StorageHeroCard(
     userAppCount: Int,
     backupCount: Int,
+    storageDirectory: File? = null,
     modifier: Modifier = Modifier
 ) {
-    val (totalGb, freeGb, usedFraction) = remember {
+    val (totalGb, freeGb, usedFraction) = remember(storageDirectory) {
         try {
-            val stat = StatFs(Environment.getDataDirectory().path)
+            val targetPath = storageDirectory?.absolutePath ?: Environment.getDataDirectory().path
+            val file = File(targetPath)
+            val statPath = if (file.exists()) file.absolutePath else Environment.getDataDirectory().path
+            val stat = StatFs(statPath)
             val totalBytes = stat.totalBytes
             val availableBytes = stat.availableBytes
             val usedBytes = (totalBytes - availableBytes).coerceAtLeast(0L)
 
             val total = totalBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
             val free = availableBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
-            val fraction = (usedBytes.toDouble() / totalBytes.toDouble()).coerceIn(0.0, 1.0).toFloat()
+            val fraction = if (totalBytes > 0) (usedBytes.toDouble() / totalBytes.toDouble()).coerceIn(0.0, 1.0).toFloat() else 0.5f
 
             Triple(total, free, fraction)
         } catch (_: Exception) {
             Triple(64.0, 20.0, 0.70f)
+        }
+    }
+
+    val storageTitle = remember(storageDirectory) {
+        val path = storageDirectory?.absolutePath ?: ""
+        when {
+            path.contains("usb", ignoreCase = true) -> "USB Storage & Keystore"
+            path.contains("sdcard", ignoreCase = true) || path.matches(Regex(".*/storage/[A-Za-z0-9]{4}-[A-Za-z0-9]{4}.*")) -> "SD Card & Keystore"
+            else -> "Device Storage & Keystore"
         }
     }
 
@@ -105,7 +118,7 @@ fun StorageHeroCard(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Device Storage & Keystore",
+                        text = storageTitle,
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RemoveDone
+import androidx.compose.material.icons.filled.SdCard
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -62,7 +63,9 @@ import io.github.project.vault.core.backup.BackupEngine
 import io.github.project.vault.core.backup.BackupProgress
 import io.github.project.vault.core.backup.BackupResult
 import io.github.project.vault.core.root.RootShell
+import io.github.project.vault.core.storage.StorageLocationManager
 import io.github.project.vault.data.model.AppInfo
+import io.github.project.vault.data.model.StorageTarget
 import io.github.project.vault.data.repository.AppRepository
 import io.github.project.vault.data.repository.BackupRepository
 import io.github.project.vault.ui.components.AppItemCard
@@ -70,7 +73,11 @@ import io.github.project.vault.ui.components.BackupProgressDialog
 import io.github.project.vault.ui.components.FloatingBackupBar
 import io.github.project.vault.ui.components.StatusBadge
 import io.github.project.vault.ui.components.StorageHeroCard
+import io.github.project.vault.ui.components.StorageSelectorSheet
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 enum class AppFilter { USER, BACKED_UP, SYSTEM, ALL }
 
@@ -93,6 +100,11 @@ fun AppListScreen(
     var selectedFilter by remember { mutableStateOf(AppFilter.USER) }
     val selectedPackages = remember { mutableStateListOf<String>() }
 
+    // Storage Selector Sheet State
+    var showStorageSheet by remember { mutableStateOf(false) }
+    var availableTargets by remember { mutableStateOf<List<StorageTarget>>(emptyList()) }
+    var currentStorageDirectory by remember { mutableStateOf(backupRepository.getBackupDirectory()) }
+
     // Backup Sheet & Progress State
     var targetBackupApps by remember { mutableStateOf<List<AppInfo>?>(null) }
     var activeProgress by remember { mutableStateOf<BackupProgress?>(null) }
@@ -101,6 +113,7 @@ fun AppListScreen(
         if (apps.isEmpty()) {
             isLoading = true
         }
+        currentStorageDirectory = backupRepository.getBackupDirectory()
         val count = runCatching { backupRepository.getLocalBackups(forceRefresh).size }.getOrDefault(0)
         backupCount = count
         val fastList = appRepository.getInstalledAppsFast(includeSystem = true, forceRefresh = forceRefresh)
@@ -112,6 +125,14 @@ fun AppListScreen(
     LaunchedEffect(Unit) {
         if (apps.isEmpty()) {
             reloadApps(forceRefresh = false)
+        }
+        withContext(Dispatchers.IO) {
+            val targets = StorageLocationManager.getAvailableStorageTargets(context)
+            val currentDir = backupRepository.getBackupDirectory()
+            withContext(Dispatchers.Main) {
+                availableTargets = targets
+                currentStorageDirectory = currentDir
+            }
         }
     }
 
@@ -174,6 +195,26 @@ fun AppListScreen(
                         )
                     },
                     actions = {
+                        // Storage Location Selector (SD Card / Pendrive / Internal)
+                        IconButton(onClick = {
+                            scope.launch {
+                                withContext(Dispatchers.IO) {
+                                    val targets = StorageLocationManager.getAvailableStorageTargets(context)
+                                    val currentDir = backupRepository.getBackupDirectory()
+                                    withContext(Dispatchers.Main) {
+                                        availableTargets = targets
+                                        currentStorageDirectory = currentDir
+                                        showStorageSheet = true
+                                    }
+                                }
+                            }
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.SdCard,
+                                contentDescription = "Backup Storage Location"
+                            )
+                        }
+
                         // Multi-select / Deselect toggle
                         if (filteredApps.isNotEmpty()) {
                             val allVisibleSelected = filteredApps.all { it.packageName in selectedPackages }
@@ -219,6 +260,7 @@ fun AppListScreen(
                     StorageHeroCard(
                         userAppCount = userAppsCount,
                         backupCount = backupCount,
+                        storageDirectory = currentStorageDirectory,
                         modifier = Modifier.padding(bottom = 6.dp)
                     )
                 }
@@ -402,6 +444,33 @@ fun AppListScreen(
             currentApp = prog.currentApp,
             currentStep = prog.currentStep,
             progressFraction = prog.progressFraction
+        )
+    }
+
+    // Storage Location Selector Sheet
+    if (showStorageSheet) {
+        StorageSelectorSheet(
+            availableTargets = availableTargets,
+            currentStoragePath = currentStorageDirectory.absolutePath,
+            onSelectTarget = { target ->
+                backupRepository.setBackupDirectory(target.backupDirectoryPath)
+                currentStorageDirectory = File(target.backupDirectoryPath)
+                AppRepository.invalidateCache()
+                scope.launch {
+                    reloadApps(forceRefresh = true)
+                }
+                showStorageSheet = false
+            },
+            onCustomPathSelected = { customPath ->
+                backupRepository.setBackupDirectory(customPath)
+                currentStorageDirectory = File(customPath)
+                AppRepository.invalidateCache()
+                scope.launch {
+                    reloadApps(forceRefresh = true)
+                }
+                showStorageSheet = false
+            },
+            onDismissRequest = { showStorageSheet = false }
         )
     }
 }
