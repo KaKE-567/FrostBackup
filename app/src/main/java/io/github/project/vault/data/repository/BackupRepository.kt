@@ -111,7 +111,7 @@ class BackupRepository(private val context: Context) {
         }
 
         val result = RootShell.execute(
-            "tar -xOf \"$path\" ./metadata.json 2>/dev/null || tar -xOf \"$path\" metadata.json 2>/dev/null"
+            "tar -xf \"$path\" -O ./metadata.json 2>/dev/null || tar -xf \"$path\" -O metadata.json 2>/dev/null"
         )
         val sizeBytes = if (knownSize > 0L) knownSize else {
             val sizeResult = RootShell.execute("stat -c %s \"$path\" 2>/dev/null || wc -c < \"$path\"")
@@ -133,15 +133,18 @@ class BackupRepository(private val context: Context) {
             val isEncrypted = !isTar
 
             val name = file.nameWithoutExtension
-            val appTitle = name.substringBeforeLast("_").replace("_", " ").replaceFirstChar { it.uppercase() }
+            val appSlug = name.substringBeforeLast("_").ifBlank { name }
+            val appTitle = appSlug.replace("_", " ").replaceFirstChar { it.uppercase() }
 
             val parsedTimestamp = try {
                 val timeStr = name.takeLast(19) // "yyyy-MM-dd_HH-mm-ss"
                 SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).parse(timeStr)?.time
             } catch (_: Exception) { null } ?: (if (file.lastModified() > 0L) file.lastModified() else System.currentTimeMillis())
 
+            val resolvedPackage = resolvePackageNameFromSlug(appSlug) ?: appSlug
+
             BackupMetadata(
-                packageName = name.substringBeforeLast("_").ifBlank { name },
+                packageName = resolvedPackage,
                 appName = appTitle,
                 versionName = "Unknown",
                 versionCode = 0,
@@ -153,6 +156,24 @@ class BackupRepository(private val context: Context) {
                 archiveSizeBytes = sizeBytes
             )
         }
+    }
+
+    private fun resolvePackageNameFromSlug(slug: String): String? {
+        return runCatching {
+            val pm = context.packageManager
+            val packages = pm.getInstalledPackages(0)
+            for (pkg in packages) {
+                val appName = pkg.applicationInfo?.loadLabel(pm)?.toString() ?: ""
+                val clean = appName.trim().lowercase()
+                    .replace("\\s+".toRegex(), "_")
+                    .replace("[^a-z0-9_-]".toRegex(), "")
+                    .ifBlank { pkg.packageName.substringAfterLast(".").lowercase() }
+                if (clean.equals(slug, ignoreCase = true) || pkg.packageName.equals(slug, ignoreCase = true)) {
+                    return@runCatching pkg.packageName
+                }
+            }
+            null
+        }.getOrNull()
     }
 
     suspend fun deleteBackup(archiveFileName: String): Boolean = withContext(Dispatchers.IO) {
@@ -168,7 +189,7 @@ class BackupRepository(private val context: Context) {
     suspend fun uploadToCloud(archiveFileName: String): Boolean = withContext(Dispatchers.IO) {
         val backupDir = getBackupDirectory()
         val archiveFile = File(backupDir, archiveFileName)
-        val metaResult = RootShell.execute("tar -xOf \"${archiveFile.absolutePath}\" ./metadata.json 2>/dev/null")
+        val metaResult = RootShell.execute("tar -xf \"${archiveFile.absolutePath}\" -O ./metadata.json 2>/dev/null || tar -xf \"${archiveFile.absolutePath}\" -O metadata.json 2>/dev/null")
         val metaString = if (metaResult.isSuccess && metaResult.stdout.isNotBlank()) metaResult.stdout else "{}"
 
         val stagingDir = File(context.cacheDir, "cloud_staging")

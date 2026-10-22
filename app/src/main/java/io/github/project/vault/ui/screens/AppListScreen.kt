@@ -53,6 +53,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -113,9 +114,27 @@ fun AppListScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     var isRooted by remember { mutableStateOf(RootShell.isRootAvailableSync() ?: true) }
-    var apps by remember { mutableStateOf(AppRepository.getCachedApps() ?: emptyList()) }
-    var isLoading by remember { mutableStateOf(apps.isEmpty()) }
-    var backupCount by remember { mutableStateOf(backupRepository.getCachedBackups()?.size ?: 0) }
+    var rawApps by remember { mutableStateOf(AppRepository.getCachedApps() ?: emptyList()) }
+    var isLoading by remember { mutableStateOf(rawApps.isEmpty()) }
+
+    val backups by backupRepository.backups.collectAsState()
+    val backupCount = backups.size
+
+    val backupMap = remember(backups) {
+        backups.associateBy { it.packageName }
+    }
+
+    val apps = remember(rawApps, backupMap) {
+        rawApps.map { app ->
+            val backup = backupMap[app.packageName]
+            if (backup != null) {
+                app.copy(hasBackup = true, lastBackupTimestamp = backup.backupTimestamp)
+            } else {
+                app.copy(hasBackup = false, lastBackupTimestamp = null)
+            }
+        }
+    }
+
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf(AppFilter.USER) }
     val selectedPackages = remember { mutableStateListOf<String>() }
@@ -135,22 +154,21 @@ fun AppListScreen(
     var activeProgress by remember { mutableStateOf<BackupProgress?>(null) }
 
     suspend fun reloadApps(forceRefresh: Boolean = false) {
-        if (apps.isEmpty()) {
+        if (rawApps.isEmpty()) {
             isLoading = true
         }
         currentStorageDirectory = backupRepository.getBackupDirectory()
-        val count = runCatching { backupRepository.getLocalBackups(forceRefresh).size }.getOrDefault(0)
-        backupCount = count
+        backupRepository.refreshBackups(forceRefresh = forceRefresh)
         val fastList = appRepository.getInstalledAppsFast(includeSystem = true, forceRefresh = forceRefresh)
-        val enriched = appRepository.enrichWithBackupStatus(fastList, forceRefresh = forceRefresh)
-        apps = enriched
+        rawApps = fastList
         isLoading = false
     }
 
     LaunchedEffect(Unit) {
-        if (apps.isEmpty()) {
+        if (rawApps.isEmpty()) {
             reloadApps(forceRefresh = false)
         }
+        backupRepository.refreshBackups(forceRefresh = false)
         withContext(Dispatchers.IO) {
             val targets = StorageLocationManager.getAvailableStorageTargets(context)
             val currentDir = backupRepository.getBackupDirectory()
