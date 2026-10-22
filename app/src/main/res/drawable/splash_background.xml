@@ -2,8 +2,8 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/splash_window_background" />
     <item
-        android:width="72dp"
-        android:height="72dp"
+        android:width="120dp"
+        android:height="120dp"
         android:gravity="center"
-        android:drawable="@drawable/ic_launcher_foreground" />
+        android:drawable="@mipmap/ic_launcher_round" />
 </layer-list>
