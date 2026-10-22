@@ -19,34 +19,39 @@ fun FrostedBackground(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
+    val bgColor = MaterialTheme.colorScheme.background
+    val isAmoled = bgColor == Color.Black
+
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(bgColor)
     ) {
-        val primaryGlow = MaterialTheme.colorScheme.primary.copy(alpha = 0.09f)
-        val secondaryGlow = MaterialTheme.colorScheme.secondary.copy(alpha = 0.07f)
+        if (!isAmoled) {
+            val primaryGlow = MaterialTheme.colorScheme.primary.copy(alpha = 0.09f)
+            val secondaryGlow = MaterialTheme.colorScheme.secondary.copy(alpha = 0.07f)
 
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(primaryGlow, Color.Transparent),
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(primaryGlow, Color.Transparent),
+                        center = Offset(size.width * 0.9f, size.height * 0.1f),
+                        radius = size.width * 0.65f
+                    ),
                     center = Offset(size.width * 0.9f, size.height * 0.1f),
                     radius = size.width * 0.65f
-                ),
-                center = Offset(size.width * 0.9f, size.height * 0.1f),
-                radius = size.width * 0.65f
-            )
+                )
 
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(secondaryGlow, Color.Transparent),
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(secondaryGlow, Color.Transparent),
+                        center = Offset(size.width * 0.1f, size.height * 0.8f),
+                        radius = size.width * 0.75f
+                    ),
                     center = Offset(size.width * 0.1f, size.height * 0.8f),
                     radius = size.width * 0.75f
-                ),
-                center = Offset(size.width * 0.1f, size.height * 0.8f),
-                radius = size.width * 0.75f
-            )
+                )
+            }
         }
 
         CompositionLocalProvider(

@@ -15,9 +15,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
@@ -82,9 +84,25 @@ import kotlinx.coroutines.withContext
 fun SettingsScreen(
     backupRepository: BackupRepository,
     currentThemeMode: ThemeMode = ThemeMode.SYSTEM,
+    currentKeyColor: Int = 0,
     onThemeChanged: (ThemeMode) -> Unit = {},
+    onKeyColorChanged: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    var showThemeScreen by remember { mutableStateOf(false) }
+
+    if (showThemeScreen) {
+        ThemeScreen(
+            currentThemeMode = currentThemeMode,
+            currentKeyColor = currentKeyColor,
+            onThemeModeChanged = onThemeChanged,
+            onKeyColorChanged = onKeyColorChanged,
+            onBack = { showThemeScreen = false },
+            modifier = modifier
+        )
+        return
+    }
+
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -167,76 +185,89 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Appearance & Theme Card (White Mode / Dark Mode / System)
+            // Appearance & Theme Card (Custom Palettes, Monet, AMOLED, & Live Preview)
             Card(
                 shape = RoundedCornerShape(20.dp),
                 colors = glassCardColors,
                 border = frostedBorder,
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .clickable { showThemeScreen = true }
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Palette,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Appearance & Theme",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                        )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.50f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Palette,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Appearance & Theme",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                            val accentLabel = if (currentKeyColor == 0) "Dynamic Monet" else "Custom Palette"
+                            Text(
+                                text = "${currentThemeMode.title} • $accentLabel",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = { showThemeScreen = true }) {
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = "Open Theme Customizer",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                    ThemeMode.values().forEach { mode ->
-                        val isSelected = currentThemeMode == mode
-                        val modeIcon = when (mode) {
-                            ThemeMode.LIGHT -> Icons.Default.LightMode
-                            ThemeMode.DARK -> Icons.Default.DarkMode
-                            ThemeMode.SYSTEM -> Icons.Default.SettingsBrightness
-                        }
-                        val modeDescription = when (mode) {
-                            ThemeMode.LIGHT -> "Clean crisp white mode with emerald highlights"
-                            ThemeMode.DARK -> "Deep slate dark mode with mint highlights"
-                            ThemeMode.SYSTEM -> "Match your Android system display setting"
-                        }
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable { onThemeChanged(mode) }
-                                .padding(vertical = 8.dp, horizontal = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = isSelected,
-                                onClick = { onThemeChanged(mode) }
+                    // Mini Palette Preview Dots Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val previewColors = listOf(
+                            MaterialTheme.colorScheme.primary,
+                            Color(0xFF006C50),
+                            Color(0xFF00BCD4),
+                            Color(0xFF2196F3),
+                            Color(0xFF9C27B0),
+                            Color(0xFFE91E63),
+                            Color(0xFFFF9800)
+                        )
+                        previewColors.forEach { dotColor ->
+                            Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(CircleShape)
+                                    .background(dotColor)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Icon(
-                                imageVector = modeIcon,
-                                contentDescription = null,
-                                tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = mode.title,
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                    )
-                                )
-                                Text(
-                                    text = modeDescription,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
                         }
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            text = "Customize",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }

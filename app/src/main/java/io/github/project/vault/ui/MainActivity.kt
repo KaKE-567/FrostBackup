@@ -66,8 +66,11 @@ class MainActivity : ComponentActivity() {
             var currentThemeMode by remember {
                 mutableStateOf(ThemePreference.getThemeMode(applicationContext))
             }
+            var currentKeyColor by remember {
+                mutableStateOf(ThemePreference.getKeyColor(applicationContext))
+            }
 
-            AppVaultTheme(themeMode = currentThemeMode) {
+            AppVaultTheme(themeMode = currentThemeMode, keyColor = currentKeyColor) {
                 FrostedBackground {
                     var isRootGranted by remember { mutableStateOf<Boolean?>(null) }
 
@@ -167,9 +170,14 @@ class MainActivity : ComponentActivity() {
                                         3 -> SettingsScreen(
                                             backupRepository = backupRepository,
                                             currentThemeMode = currentThemeMode,
+                                            currentKeyColor = currentKeyColor,
                                             onThemeChanged = { newMode ->
                                                 currentThemeMode = newMode
                                                 ThemePreference.setThemeMode(applicationContext, newMode)
+                                            },
+                                            onKeyColorChanged = { newColor ->
+                                                currentKeyColor = newColor
+                                                ThemePreference.setKeyColor(applicationContext, newColor)
                                             }
                                         )
                                     }
