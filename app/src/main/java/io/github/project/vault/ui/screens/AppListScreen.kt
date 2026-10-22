@@ -140,6 +140,10 @@ fun AppListScreen(
     val backedUpCount = remember(apps) { apps.count { it.hasBackup } }
     val systemAppsCount = remember(apps) { apps.count { it.isSystemApp } }
 
+    val currentTarget = remember(availableTargets, currentStorageDirectory) {
+        availableTargets.find { it.backupDirectoryPath == currentStorageDirectory.absolutePath }
+    }
+
     val filteredApps = remember(apps, searchQuery, selectedFilter) {
         apps.filter { app ->
             val matchesFilter = when (selectedFilter) {
@@ -260,6 +264,7 @@ fun AppListScreen(
                     StorageHeroCard(
                         userAppCount = userAppsCount,
                         backupCount = backupCount,
+                        activeTarget = currentTarget,
                         storageDirectory = currentStorageDirectory,
                         modifier = Modifier.padding(bottom = 6.dp)
                     )

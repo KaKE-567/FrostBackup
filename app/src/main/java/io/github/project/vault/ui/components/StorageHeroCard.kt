@@ -19,9 +19,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.SdCard
 import androidx.compose.material.icons.filled.SdStorage
+import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -36,6 +40,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.project.vault.data.model.StorageTarget
+import io.github.project.vault.data.model.StorageType
 import java.io.File
 import java.util.Locale
 
@@ -43,35 +49,57 @@ import java.util.Locale
 fun StorageHeroCard(
     userAppCount: Int,
     backupCount: Int,
+    activeTarget: StorageTarget? = null,
     storageDirectory: File? = null,
     modifier: Modifier = Modifier
 ) {
-    val (totalGb, freeGb, usedFraction) = remember(storageDirectory) {
+    val (totalGb, freeGb, usedFraction) = remember(activeTarget, storageDirectory) {
         try {
-            val targetPath = storageDirectory?.absolutePath ?: Environment.getDataDirectory().path
-            val file = File(targetPath)
-            val statPath = if (file.exists()) file.absolutePath else Environment.getDataDirectory().path
-            val stat = StatFs(statPath)
-            val totalBytes = stat.totalBytes
-            val availableBytes = stat.availableBytes
-            val usedBytes = (totalBytes - availableBytes).coerceAtLeast(0L)
+            if (activeTarget != null && activeTarget.totalBytes > 0) {
+                val totalBytes = activeTarget.totalBytes
+                val freeBytes = activeTarget.freeBytes
+                val usedBytes = (totalBytes - freeBytes).coerceAtLeast(0L)
 
-            val total = totalBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
-            val free = availableBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
-            val fraction = if (totalBytes > 0) (usedBytes.toDouble() / totalBytes.toDouble()).coerceIn(0.0, 1.0).toFloat() else 0.5f
+                val total = totalBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
+                val free = freeBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
+                val fraction = (usedBytes.toDouble() / totalBytes.toDouble()).coerceIn(0.0, 1.0).toFloat()
+                Triple(total, free, fraction)
+            } else {
+                val targetPath = storageDirectory?.absolutePath ?: Environment.getDataDirectory().path
+                val file = File(targetPath)
+                val statPath = if (file.exists()) file.absolutePath else Environment.getDataDirectory().path
+                val stat = StatFs(statPath)
+                val totalBytes = stat.totalBytes
+                val availableBytes = stat.availableBytes
+                val usedBytes = (totalBytes - availableBytes).coerceAtLeast(0L)
 
-            Triple(total, free, fraction)
+                val total = totalBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
+                val free = availableBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
+                val fraction = if (totalBytes > 0) (usedBytes.toDouble() / totalBytes.toDouble()).coerceIn(0.0, 1.0).toFloat() else 0.5f
+
+                Triple(total, free, fraction)
+            }
         } catch (_: Exception) {
             Triple(64.0, 20.0, 0.70f)
         }
     }
 
-    val storageTitle = remember(storageDirectory) {
-        val path = storageDirectory?.absolutePath ?: ""
-        when {
-            path.contains("usb", ignoreCase = true) -> "USB Storage & Keystore"
-            path.contains("sdcard", ignoreCase = true) || path.matches(Regex(".*/storage/[A-Za-z0-9]{4}-[A-Za-z0-9]{4}.*")) -> "SD Card & Keystore"
-            else -> "Device Storage & Keystore"
+    val (storageTitle, storageIcon) = remember(activeTarget, storageDirectory) {
+        when (activeTarget?.type) {
+            StorageType.USB_DRIVE -> Pair(activeTarget.name.ifBlank { "USB Drive Storage" }, Icons.Default.Usb)
+            StorageType.SD_CARD -> Pair(activeTarget.name.ifBlank { "MicroSD Card Storage" }, Icons.Default.SdCard)
+            StorageType.CUSTOM -> Pair("Custom Storage Directory", Icons.Default.Folder)
+            StorageType.INTERNAL -> Pair("Internal Device Storage", Icons.Default.PhoneAndroid)
+            null -> {
+                val path = storageDirectory?.absolutePath ?: ""
+                when {
+                    path.contains("usb", ignoreCase = true) || path.contains("otg", ignoreCase = true) ->
+                        Pair("USB Drive Storage", Icons.Default.Usb)
+                    path.matches(Regex(".*/storage/[A-Za-z0-9]{4}-[A-Za-z0-9]{4}.*")) ->
+                        Pair("MicroSD Card Storage", Icons.Default.SdCard)
+                    else -> Pair("Device Storage & Keystore", Icons.Default.SdStorage)
+                }
+            }
         }
     }
 
@@ -107,7 +135,7 @@ fun StorageHeroCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.SdStorage,
+                        imageVector = storageIcon,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(22.dp)
