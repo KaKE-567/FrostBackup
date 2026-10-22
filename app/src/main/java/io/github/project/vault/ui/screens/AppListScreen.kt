@@ -121,12 +121,18 @@ fun AppListScreen(
     val backupCount = backups.size
 
     val backupMap = remember(backups) {
-        backups.associateBy { it.packageName }
+        backups.associateBy { it.packageName.trim().lowercase() }
     }
 
-    val apps = remember(rawApps, backupMap) {
+    val apps = remember(rawApps, backupMap, backups) {
         rawApps.map { app ->
-            val backup = backupMap[app.packageName]
+            val pkgKey = app.packageName.trim().lowercase()
+            val backup = backupMap[pkgKey] ?: backups.find { b ->
+                val cleanBackupSlug = b.archiveFileName.substringBeforeLast("_").lowercase().replace("-", "_")
+                val cleanAppSlug = app.appName.trim().lowercase().replace("\\s+".toRegex(), "_").replace("[^a-z0-9_-]".toRegex(), "")
+                cleanBackupSlug.isNotEmpty() && (cleanBackupSlug == cleanAppSlug || b.packageName.equals(app.packageName, ignoreCase = true))
+            }
+
             if (backup != null) {
                 app.copy(hasBackup = true, lastBackupTimestamp = backup.backupTimestamp)
             } else {
@@ -165,10 +171,7 @@ fun AppListScreen(
     }
 
     LaunchedEffect(Unit) {
-        if (rawApps.isEmpty()) {
-            reloadApps(forceRefresh = false)
-        }
-        backupRepository.refreshBackups(forceRefresh = false)
+        reloadApps(forceRefresh = true)
         withContext(Dispatchers.IO) {
             val targets = StorageLocationManager.getAvailableStorageTargets(context)
             val currentDir = backupRepository.getBackupDirectory()

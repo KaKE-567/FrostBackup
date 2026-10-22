@@ -50,11 +50,14 @@ class BackupRepository(private val context: Context) {
         if (forceRefresh) {
             invalidateCache()
         }
-        getLocalBackups(forceRefresh = forceRefresh)
+        val result = getLocalBackups(forceRefresh = forceRefresh)
+        _backupsFlow.value = result
+        result
     }
 
     suspend fun getLocalBackups(forceRefresh: Boolean = false): List<BackupMetadata> = withContext(Dispatchers.IO) {
         if (!forceRefresh && cachedBackupList != null) {
+            _backupsFlow.value = cachedBackupList!!
             return@withContext cachedBackupList!!
         }
 
@@ -118,16 +121,36 @@ class BackupRepository(private val context: Context) {
             sizeResult.stdout.trim().toLongOrNull() ?: file.length()
         }
 
-        return if (result.isSuccess && result.stdout.isNotBlank()) {
+        val parsedMeta: BackupMetadata? = if (result.isSuccess && result.stdout.isNotBlank()) {
             try {
                 json.decodeFromString<BackupMetadata>(result.stdout).copy(
                     archiveSizeBytes = sizeBytes,
                     archiveFileName = file.name
                 )
-            } catch (e: Exception) {
-                null
+            } catch (_: Exception) {
+                // Fallback: extract packageName and appName using regex from metadata JSON
+                val pkgRegex = Regex("\"packageName\"\\s*:\\s*\"([^\"]+)\"")
+                val appRegex = Regex("\"appName\"\\s*:\\s*\"([^\"]+)\"")
+                val foundPkg = pkgRegex.find(result.stdout)?.groupValues?.getOrNull(1)
+                val foundName = appRegex.find(result.stdout)?.groupValues?.getOrNull(1)
+                if (!foundPkg.isNullOrBlank()) {
+                    BackupMetadata(
+                        packageName = foundPkg,
+                        appName = foundName ?: file.nameWithoutExtension,
+                        versionName = "Unknown",
+                        versionCode = 0,
+                        targetSdk = 34,
+                        originalUid = 0,
+                        backupTimestamp = file.lastModified().takeIf { it > 0 } ?: System.currentTimeMillis(),
+                        isEncrypted = false,
+                        archiveFileName = file.name,
+                        archiveSizeBytes = sizeBytes
+                    )
+                } else null
             }
-        } else {
+        } else null
+
+        return parsedMeta ?: run {
             // Check if file is actually an encrypted archive or if it's an unencrypted tar
             val isTar = RootShell.execute("tar -tf \"$path\" 2>/dev/null | head -n1").stdout.isNotBlank()
             val isEncrypted = !isTar
