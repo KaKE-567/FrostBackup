@@ -38,7 +38,10 @@ class BackupEngine(private val context: Context) {
 
         // Ensure destination folder is created via root so Android Scoped Storage does not block it
         RootShell.execute("mkdir -p ${destinationDir.absolutePath}")
-        RootShell.execute("chmod 775 ${destinationDir.absolutePath}")
+        RootShell.execute("chmod 777 ${destinationDir.absolutePath} 2>/dev/null")
+        destinationDir.parentFile?.let { parent ->
+            RootShell.execute("chmod 777 ${parent.absolutePath} 2>/dev/null")
+        }
 
         try {
             onProgress(BackupProgress("Freezing app process…", 0.1f, app.appName))
@@ -157,8 +160,9 @@ class BackupEngine(private val context: Context) {
 
             // 10. Copy final archive to storage destination via root
             onProgress(BackupProgress("Saving archive to storage…", 0.93f, app.appName))
-            RootShell.execute("cp -p $finalBundlePath ${finalArchiveFile.absolutePath}")
-            RootShell.execute("chmod 664 ${finalArchiveFile.absolutePath}")
+            RootShell.execute("cp -f $finalBundlePath ${finalArchiveFile.absolutePath}")
+            RootShell.execute("chmod 666 ${finalArchiveFile.absolutePath} 2>/dev/null")
+            RootShell.execute("am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d \"file://${finalArchiveFile.absolutePath}\" 2>/dev/null")
 
             // 11. Google Drive Cloud Upload
             var cloudUploaded = false

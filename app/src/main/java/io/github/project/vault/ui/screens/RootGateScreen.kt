@@ -83,6 +83,9 @@ fun RootGateScreen(
 
             if (hasRoot) {
                 rootStatusText = "Root access granted! Unlocking FrostBackup…"
+                RootShell.execute("pm grant ${context.packageName} android.permission.READ_EXTERNAL_STORAGE 2>/dev/null")
+                RootShell.execute("pm grant ${context.packageName} android.permission.WRITE_EXTERNAL_STORAGE 2>/dev/null")
+                RootShell.execute("appops set ${context.packageName} MANAGE_EXTERNAL_STORAGE allow 2>/dev/null")
                 delay(400)
                 onRootGranted()
             } else {
@@ -245,6 +248,9 @@ fun RootGateScreen(
                             isRooted = true
                             isChecking = false
                             rootStatusText = "Root access granted! Unlocking FrostBackup…"
+                            RootShell.execute("pm grant ${context.packageName} android.permission.READ_EXTERNAL_STORAGE 2>/dev/null")
+                            RootShell.execute("pm grant ${context.packageName} android.permission.WRITE_EXTERNAL_STORAGE 2>/dev/null")
+                            RootShell.execute("appops set ${context.packageName} MANAGE_EXTERNAL_STORAGE allow 2>/dev/null")
                             delay(350)
                             onRootGranted()
                         } else {

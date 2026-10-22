@@ -659,7 +659,10 @@ fun AppListScreen(
                     selectedPackages.clear()
                     BackupRepository.invalidateCache()
                     AppRepository.invalidateCache()
-                    reloadApps(forceRefresh = true)
+                    scope.launch {
+                        backupRepository.refreshBackups(forceRefresh = true)
+                        reloadApps(forceRefresh = true)
+                    }
                 }
             }
         )

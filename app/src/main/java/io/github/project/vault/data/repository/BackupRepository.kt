@@ -6,9 +6,14 @@ import io.github.project.vault.core.root.RootShell
 import io.github.project.vault.core.storage.StorageLocationManager
 import io.github.project.vault.data.model.BackupMetadata
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 class BackupRepository(private val context: Context) {
@@ -19,11 +24,16 @@ class BackupRepository(private val context: Context) {
         @Volatile
         private var cachedBackupList: List<BackupMetadata>? = null
 
+        private val _backupsFlow = MutableStateFlow<List<BackupMetadata>>(emptyList())
+        val backupsFlow: StateFlow<List<BackupMetadata>> = _backupsFlow.asStateFlow()
+
         fun invalidateCache() {
             metadataCache.clear()
             cachedBackupList = null
         }
     }
+
+    val backups: StateFlow<List<BackupMetadata>> = backupsFlow
 
     fun getBackupDirectory(): File {
         return StorageLocationManager.getBackupDirectory(context)
@@ -34,7 +44,14 @@ class BackupRepository(private val context: Context) {
         invalidateCache()
     }
 
-    fun getCachedBackups(): List<BackupMetadata>? = cachedBackupList
+    fun getCachedBackups(): List<BackupMetadata>? = cachedBackupList ?: _backupsFlow.value.ifEmpty { null }
+
+    suspend fun refreshBackups(forceRefresh: Boolean = true): List<BackupMetadata> = withContext(Dispatchers.IO) {
+        if (forceRefresh) {
+            invalidateCache()
+        }
+        getLocalBackups(forceRefresh = forceRefresh)
+    }
 
     suspend fun getLocalBackups(forceRefresh: Boolean = false): List<BackupMetadata> = withContext(Dispatchers.IO) {
         if (!forceRefresh && cachedBackupList != null) {
@@ -43,14 +60,25 @@ class BackupRepository(private val context: Context) {
 
         val backupDir = getBackupDirectory()
 
-        // Fast native file listing first (0ms, no su process spawn)
+        // 1. Fast native file listing first (0ms, no su process spawn)
         val directFiles = backupDir.listFiles { file -> file.extension == "vault" }
-        val filePaths = if (directFiles != null) {
+
+        // 2. If native listing returned null or empty, ensure folder exists and query via root shell
+        val filePaths: List<String> = if (!directFiles.isNullOrEmpty()) {
             directFiles.map { it.absolutePath }
         } else {
-            // Fallback to root shell if standard file access fails
-            RootShell.execute("mkdir -p ${backupDir.absolutePath}")
-            val listResult = RootShell.execute("ls -1 ${backupDir.absolutePath}/*.vault 2>/dev/null")
+            RootShell.execute("mkdir -p \"${backupDir.absolutePath}\" && chmod 777 \"${backupDir.absolutePath}\" 2>/dev/null")
+
+            val findCmd = "find \"${backupDir.absolutePath}\" -maxdepth 1 -name '*.vault' 2>/dev/null"
+            var listResult = RootShell.execute(findCmd)
+
+            if (!listResult.isSuccess || listResult.stdout.isBlank()) {
+                if (backupDir.absolutePath.startsWith("/storage/emulated/0")) {
+                    val altPath = backupDir.absolutePath.replaceFirst("/storage/emulated/0", "/sdcard")
+                    listResult = RootShell.execute("find \"$altPath\" -maxdepth 1 -name '*.vault' 2>/dev/null")
+                }
+            }
+
             if (!listResult.isSuccess || listResult.stdout.isBlank()) {
                 emptyList()
             } else {
@@ -58,19 +86,24 @@ class BackupRepository(private val context: Context) {
             }
         }
 
-        val backups = filePaths.mapNotNull { path ->
+        val parsedList = filePaths.mapNotNull { path ->
             val file = File(path)
-            val cacheKey = "${file.absolutePath}_${file.length()}"
-            metadataCache[cacheKey] ?: parseMetadataFromArchive(file)?.also {
+            val size = if (file.length() > 0L) file.length() else {
+                val sizeRes = RootShell.execute("stat -c %s \"$path\" 2>/dev/null || wc -c < \"$path\"")
+                sizeRes.stdout.trim().toLongOrNull() ?: 0L
+            }
+            val cacheKey = "${file.name}_$size"
+            metadataCache[cacheKey] ?: parseMetadataFromArchive(file, size)?.also {
                 metadataCache[cacheKey] = it
             }
         }.sortedByDescending { it.backupTimestamp }
 
-        cachedBackupList = backups
-        backups
+        cachedBackupList = parsedList
+        _backupsFlow.value = parsedList
+        parsedList
     }
 
-    private suspend fun parseMetadataFromArchive(file: File): BackupMetadata? {
+    private suspend fun parseMetadataFromArchive(file: File, knownSize: Long = 0L): BackupMetadata? {
         val path = if (file.absolutePath.startsWith("/storage/emulated/0")) {
             file.absolutePath.replaceFirst("/storage/emulated/0", "/sdcard")
         } else {
@@ -78,12 +111,15 @@ class BackupRepository(private val context: Context) {
         }
 
         val result = RootShell.execute(
-            "tar -xOf $path ./metadata.json 2>/dev/null || tar -xOf $path metadata.json 2>/dev/null"
+            "tar -xOf \"$path\" ./metadata.json 2>/dev/null || tar -xOf \"$path\" metadata.json 2>/dev/null"
         )
+        val sizeBytes = if (knownSize > 0L) knownSize else {
+            val sizeResult = RootShell.execute("stat -c %s \"$path\" 2>/dev/null || wc -c < \"$path\"")
+            sizeResult.stdout.trim().toLongOrNull() ?: file.length()
+        }
+
         return if (result.isSuccess && result.stdout.isNotBlank()) {
             try {
-                val sizeResult = RootShell.execute("stat -c %s $path 2>/dev/null || wc -c < $path")
-                val sizeBytes = sizeResult.stdout.trim().toLongOrNull() ?: file.length()
                 json.decodeFromString<BackupMetadata>(result.stdout).copy(
                     archiveSizeBytes = sizeBytes,
                     archiveFileName = file.name
@@ -93,13 +129,17 @@ class BackupRepository(private val context: Context) {
             }
         } else {
             // Check if file is actually an encrypted archive or if it's an unencrypted tar
-            val isTar = RootShell.execute("tar -tf $path 2>/dev/null | head -n1").stdout.isNotBlank()
+            val isTar = RootShell.execute("tar -tf \"$path\" 2>/dev/null | head -n1").stdout.isNotBlank()
             val isEncrypted = !isTar
 
-            val sizeResult = RootShell.execute("stat -c %s $path 2>/dev/null || wc -c < $path")
-            val sizeBytes = sizeResult.stdout.trim().toLongOrNull() ?: file.length()
             val name = file.nameWithoutExtension
             val appTitle = name.substringBeforeLast("_").replace("_", " ").replaceFirstChar { it.uppercase() }
+
+            val parsedTimestamp = try {
+                val timeStr = name.takeLast(19) // "yyyy-MM-dd_HH-mm-ss"
+                SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).parse(timeStr)?.time
+            } catch (_: Exception) { null } ?: (if (file.lastModified() > 0L) file.lastModified() else System.currentTimeMillis())
+
             BackupMetadata(
                 packageName = name.substringBeforeLast("_").ifBlank { name },
                 appName = appTitle,
@@ -107,7 +147,7 @@ class BackupRepository(private val context: Context) {
                 versionCode = 0,
                 targetSdk = 34,
                 originalUid = 0,
-                backupTimestamp = file.lastModified(),
+                backupTimestamp = parsedTimestamp,
                 isEncrypted = isEncrypted,
                 archiveFileName = file.name,
                 archiveSizeBytes = sizeBytes
@@ -117,9 +157,10 @@ class BackupRepository(private val context: Context) {
 
     suspend fun deleteBackup(archiveFileName: String): Boolean = withContext(Dispatchers.IO) {
         val filePath = "${getBackupDirectory().absolutePath}/$archiveFileName"
-        val result = RootShell.execute("rm -f $filePath")
+        val result = RootShell.execute("rm -f \"$filePath\"")
         if (result.isSuccess) {
             invalidateCache()
+            getLocalBackups(forceRefresh = true)
         }
         result.isSuccess
     }
@@ -127,15 +168,15 @@ class BackupRepository(private val context: Context) {
     suspend fun uploadToCloud(archiveFileName: String): Boolean = withContext(Dispatchers.IO) {
         val backupDir = getBackupDirectory()
         val archiveFile = File(backupDir, archiveFileName)
-        val metaResult = RootShell.execute("tar -xOf ${archiveFile.absolutePath} ./metadata.json 2>/dev/null")
+        val metaResult = RootShell.execute("tar -xOf \"${archiveFile.absolutePath}\" ./metadata.json 2>/dev/null")
         val metaString = if (metaResult.isSuccess && metaResult.stdout.isNotBlank()) metaResult.stdout else "{}"
 
         val stagingDir = File(context.cacheDir, "cloud_staging")
         stagingDir.mkdirs()
         val cacheStaging = File(stagingDir, archiveFileName)
         try {
-            RootShell.execute("cp -p ${archiveFile.absolutePath} ${cacheStaging.absolutePath}")
-            RootShell.execute("chmod 666 ${cacheStaging.absolutePath}")
+            RootShell.execute("cp -p \"${archiveFile.absolutePath}\" \"${cacheStaging.absolutePath}\"")
+            RootShell.execute("chmod 666 \"${cacheStaging.absolutePath}\"")
 
             val drive = GoogleDriveManager(context)
             if (!drive.isConnected()) return@withContext false
@@ -143,7 +184,7 @@ class BackupRepository(private val context: Context) {
         } catch (e: Exception) {
             false
         } finally {
-            RootShell.execute("rm -rf ${stagingDir.absolutePath}")
+            RootShell.execute("rm -rf \"${stagingDir.absolutePath}\"")
         }
     }
 }

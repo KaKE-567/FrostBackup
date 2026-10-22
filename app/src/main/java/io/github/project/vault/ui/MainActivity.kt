@@ -165,7 +165,10 @@ class MainActivity : ComponentActivity() {
                                 ) { page ->
                                     when (page) {
                                         0 -> AppListScreen(appRepository = appRepository, backupRepository = backupRepository)
-                                        1 -> RestoreScreen(backupRepository = backupRepository)
+                                        1 -> RestoreScreen(
+                                            backupRepository = backupRepository,
+                                            isSelected = (pagerState.currentPage == 1)
+                                        )
                                         2 -> CloudScreen(backupRepository = backupRepository)
                                         3 -> SettingsScreen(
                                             backupRepository = backupRepository,

@@ -505,6 +505,7 @@ fun CloudScreen(
                                                 val ok = driveManager.downloadBackup(item.fileId, dest) {}
                                                 if (ok) {
                                                     snackbarHostState.showSnackbar("Downloaded to local storage!")
+                                                    backupRepository.refreshBackups(forceRefresh = true)
                                                 } else {
                                                     snackbarHostState.showSnackbar("Download failed")
                                                 }

@@ -50,6 +50,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -86,13 +87,14 @@ import java.util.Locale
 @Composable
 fun RestoreScreen(
     backupRepository: BackupRepository,
+    isSelected: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    var backups by remember { mutableStateOf(backupRepository.getCachedBackups() ?: emptyList()) }
+    val backups by backupRepository.backups.collectAsState()
     var isLoading by remember { mutableStateOf(backups.isEmpty()) }
     var activeProgress by remember { mutableStateOf<RestoreProgress?>(null) }
 
@@ -106,13 +108,19 @@ fun RestoreScreen(
         if (backups.isEmpty()) {
             isLoading = true
         }
-        backups = backupRepository.getLocalBackups(forceRefresh)
+        backupRepository.refreshBackups(forceRefresh = forceRefresh)
         isLoading = false
     }
 
     LaunchedEffect(Unit) {
         if (backups.isEmpty()) {
             reloadBackups(forceRefresh = false)
+        }
+    }
+
+    LaunchedEffect(isSelected) {
+        if (isSelected) {
+            reloadBackups(forceRefresh = true)
         }
     }
 
