@@ -75,6 +75,9 @@ class AppRepository(
                 splitSourceDirs = splitDirs,
                 dataDir = appInfo.dataDir,
                 appSizeFormatted = sizeFormatted,
+                appSizeBytes = apkSize,
+                firstInstallTime = packageInfo.firstInstallTime,
+                lastUpdateTime = packageInfo.lastUpdateTime,
                 hasBackup = false,
                 lastBackupTimestamp = null
             )

@@ -17,6 +17,9 @@ data class AppInfo(
     val dataDir: String = "/data/data/$packageName",
     val externalDataDir: String? = null,
     val appSizeFormatted: String = "",
+    val appSizeBytes: Long = 0L,
+    val firstInstallTime: Long = 0L,
+    val lastUpdateTime: Long = 0L,
     val hasBackup: Boolean = false,
     val lastBackupTimestamp: Long? = null
 )

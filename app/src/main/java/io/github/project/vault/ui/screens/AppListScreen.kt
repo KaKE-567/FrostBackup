@@ -18,14 +18,21 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RemoveDone
 import androidx.compose.material.icons.filled.SdCard
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -56,9 +63,11 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.project.vault.R
 import io.github.project.vault.core.backup.BackupEngine
 import io.github.project.vault.core.backup.BackupProgress
 import io.github.project.vault.core.backup.BackupResult
@@ -78,6 +87,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+
+enum class AppSortOption(val label: String) {
+    NAME_ASC("Name (A–Z)"),
+    NAME_DESC("Name (Z–A)"),
+    SIZE_DESC("App Size (Largest)"),
+    RECENTLY_UPDATED("Recently Updated"),
+    RECENTLY_INSTALLED("Recently Installed")
+}
 
 enum class AppFilter { USER, BACKED_UP, SYSTEM, ALL }
 
@@ -99,6 +116,11 @@ fun AppListScreen(
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf(AppFilter.USER) }
     val selectedPackages = remember { mutableStateListOf<String>() }
+
+    // Sorting and Menu State
+    var sortOption by remember { mutableStateOf(AppSortOption.NAME_ASC) }
+    var showSortMenu by remember { mutableStateOf(false) }
+    var showMoreMenu by remember { mutableStateOf(false) }
 
     // Storage Selector Sheet State
     var showStorageSheet by remember { mutableStateOf(false) }
@@ -144,8 +166,8 @@ fun AppListScreen(
         availableTargets.find { it.backupDirectoryPath == currentStorageDirectory.absolutePath }
     }
 
-    val filteredApps = remember(apps, searchQuery, selectedFilter) {
-        apps.filter { app ->
+    val filteredApps = remember(apps, searchQuery, selectedFilter, sortOption) {
+        val list = apps.filter { app ->
             val matchesFilter = when (selectedFilter) {
                 AppFilter.USER -> !app.isSystemApp
                 AppFilter.BACKED_UP -> app.hasBackup
@@ -158,6 +180,13 @@ fun AppListScreen(
 
             matchesFilter && matchesSearch
         }
+        when (sortOption) {
+            AppSortOption.NAME_ASC -> list.sortedBy { it.appName.lowercase() }
+            AppSortOption.NAME_DESC -> list.sortedByDescending { it.appName.lowercase() }
+            AppSortOption.SIZE_DESC -> list.sortedByDescending { it.appSizeBytes }
+            AppSortOption.RECENTLY_UPDATED -> list.sortedByDescending { it.lastUpdateTime }
+            AppSortOption.RECENTLY_INSTALLED -> list.sortedByDescending { it.firstInstallTime }
+        }
     }
 
     val outlineColor = MaterialTheme.colorScheme.outline
@@ -167,61 +196,35 @@ fun AppListScreen(
             containerColor = Color.Transparent,
             contentColor = MaterialTheme.colorScheme.onBackground,
             topBar = {
-                TopAppBar(
-                    title = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
+                if (selectedPackages.isNotEmpty()) {
+                    TopAppBar(
+                        navigationIcon = {
+                            IconButton(onClick = { selectedPackages.clear() }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear Selection")
+                            }
+                        },
+                        title = {
                             Text(
-                                text = "Applications",
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                text = "${selectedPackages.size} Selected",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            StatusBadge(
-                                text = if (isRooted) "Superuser" else "No Root",
-                                containerColor = if (isRooted) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
-                                contentColor = if (isRooted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                            titleContentColor = MaterialTheme.colorScheme.onSurface,
+                            actionIconContentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        modifier = Modifier.drawBehind {
+                            drawLine(
+                                color = outlineColor.copy(alpha = 0.20f),
+                                start = Offset(0f, size.height),
+                                end = Offset(size.width, size.height),
+                                strokeWidth = 1.dp.toPx()
                             )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                        titleContentColor = MaterialTheme.colorScheme.onSurface,
-                        actionIconContentColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    modifier = Modifier.drawBehind {
-                        drawLine(
-                            color = outlineColor.copy(alpha = 0.15f),
-                            start = Offset(0f, size.height),
-                            end = Offset(size.width, size.height),
-                            strokeWidth = 1.dp.toPx()
-                        )
-                    },
-                    actions = {
-                        // Storage Location Selector (SD Card / Pendrive / Internal)
-                        IconButton(onClick = {
-                            scope.launch {
-                                withContext(Dispatchers.IO) {
-                                    val targets = StorageLocationManager.getAvailableStorageTargets(context)
-                                    val currentDir = backupRepository.getBackupDirectory()
-                                    withContext(Dispatchers.Main) {
-                                        availableTargets = targets
-                                        currentStorageDirectory = currentDir
-                                        showStorageSheet = true
-                                    }
-                                }
-                            }
-                        }) {
-                            Icon(
-                                imageVector = Icons.Default.SdCard,
-                                contentDescription = "Backup Storage Location"
-                            )
-                        }
-
-                        // Multi-select / Deselect toggle
-                        if (filteredApps.isNotEmpty()) {
-                            val allVisibleSelected = filteredApps.all { it.packageName in selectedPackages }
+                        },
+                        actions = {
+                            val allVisibleSelected = filteredApps.isNotEmpty() && filteredApps.all { it.packageName in selectedPackages }
                             IconButton(onClick = {
                                 if (allVisibleSelected) {
                                     filteredApps.forEach { selectedPackages.remove(it.packageName) }
@@ -236,13 +239,205 @@ fun AppListScreen(
                                     contentDescription = if (allVisibleSelected) "Deselect All" else "Select All"
                                 )
                             }
+                            Button(
+                                onClick = {
+                                    val selected = apps.filter { it.packageName in selectedPackages }
+                                    targetBackupApps = selected
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                Icon(Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Backup", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
+                            }
                         }
+                    )
+                } else {
+                    TopAppBar(
+                        title = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_frost_brand_logo),
+                                        contentDescription = "FrostBackup Logo",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                Column(verticalArrangement = Arrangement.Center) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "Applications",
+                                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        StatusBadge(
+                                            text = if (isRooted) "Superuser" else "No Root",
+                                            containerColor = if (isRooted) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                                            contentColor = if (isRooted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                    val subtitle = remember(userAppsCount, backedUpCount, filteredApps.size, selectedFilter, apps.size) {
+                                        when (selectedFilter) {
+                                            AppFilter.USER -> "$userAppsCount User Apps • $backedUpCount Backed Up"
+                                            AppFilter.BACKED_UP -> "$backedUpCount Backed Up Apps"
+                                            AppFilter.SYSTEM -> "$systemAppsCount System Apps"
+                                            AppFilter.ALL -> "${apps.size} Total Applications"
+                                        }
+                                    }
+                                    Text(
+                                        text = subtitle,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                            titleContentColor = MaterialTheme.colorScheme.onSurface,
+                            actionIconContentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        modifier = Modifier.drawBehind {
+                            drawLine(
+                                color = outlineColor.copy(alpha = 0.15f),
+                                start = Offset(0f, size.height),
+                                end = Offset(size.width, size.height),
+                                strokeWidth = 1.dp.toPx()
+                            )
+                        },
+                        actions = {
+                            // Sort Dropdown Button
+                            Box {
+                                IconButton(onClick = { showSortMenu = true }) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Sort,
+                                        contentDescription = "Sort Applications"
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = showSortMenu,
+                                    onDismissRequest = { showSortMenu = false }
+                                ) {
+                                    AppSortOption.values().forEach { option ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    if (sortOption == option) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Check,
+                                                            contentDescription = null,
+                                                            tint = MaterialTheme.colorScheme.primary,
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    } else {
+                                                        Spacer(modifier = Modifier.size(16.dp))
+                                                    }
+                                                    Text(option.label)
+                                                }
+                                            },
+                                            onClick = {
+                                                sortOption = option
+                                                showSortMenu = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
 
-                        IconButton(onClick = { scope.launch { reloadApps(forceRefresh = true) } }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                            // Storage Location Selector (SD Card / Pendrive / Internal)
+                            IconButton(onClick = {
+                                scope.launch {
+                                    withContext(Dispatchers.IO) {
+                                        val targets = StorageLocationManager.getAvailableStorageTargets(context)
+                                        val currentDir = backupRepository.getBackupDirectory()
+                                        withContext(Dispatchers.Main) {
+                                            availableTargets = targets
+                                            currentStorageDirectory = currentDir
+                                            showStorageSheet = true
+                                        }
+                                    }
+                                }
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Default.SdCard,
+                                    contentDescription = "Backup Storage Location"
+                                )
+                            }
+
+                            // Multi-select / Deselect toggle
+                            if (filteredApps.isNotEmpty()) {
+                                val allVisibleSelected = filteredApps.all { it.packageName in selectedPackages }
+                                IconButton(onClick = {
+                                    if (allVisibleSelected) {
+                                        filteredApps.forEach { selectedPackages.remove(it.packageName) }
+                                    } else {
+                                        filteredApps.forEach {
+                                            if (it.packageName !in selectedPackages) selectedPackages.add(it.packageName)
+                                        }
+                                    }
+                                }) {
+                                    Icon(
+                                        imageVector = if (allVisibleSelected) Icons.Default.RemoveDone else Icons.Default.DoneAll,
+                                        contentDescription = if (allVisibleSelected) "Deselect All" else "Select All"
+                                    )
+                                }
+                            }
+
+                            // Overflow Menu
+                            Box {
+                                IconButton(onClick = { showMoreMenu = true }) {
+                                    Icon(
+                                        imageVector = Icons.Default.MoreVert,
+                                        contentDescription = "More Options"
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = showMoreMenu,
+                                    onDismissRequest = { showMoreMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Select Unbacked Apps") },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            filteredApps.filter { !it.hasBackup }.forEach {
+                                                if (it.packageName !in selectedPackages) selectedPackages.add(it.packageName)
+                                            }
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Refresh List") },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            scope.launch { reloadApps(forceRefresh = true) }
+                                        }
+                                    )
+                                }
+                            }
                         }
-                    }
-                )
+                    )
+                }
             },
             snackbarHost = { SnackbarHost(snackbarHostState) },
             modifier = Modifier.fillMaxSize()
