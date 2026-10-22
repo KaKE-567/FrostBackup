@@ -65,9 +65,15 @@ fun StorageHeroCard(
                 val fraction = (usedBytes.toDouble() / totalBytes.toDouble()).coerceIn(0.0, 1.0).toFloat()
                 Triple(total, free, fraction)
             } else {
-                val targetPath = storageDirectory?.absolutePath ?: Environment.getExternalStorageDirectory().path
-                val fallbackFile = File(targetPath)
-                val statPath = if (fallbackFile.exists()) fallbackFile.absolutePath else Environment.getExternalStorageDirectory().path
+                val internalPath = Environment.getExternalStorageDirectory().absolutePath
+                val targetPath = storageDirectory?.absolutePath ?: internalPath
+                val statPath = if (targetPath.startsWith(internalPath) || targetPath.startsWith("/storage/emulated/0")) {
+                    targetPath
+                } else if (File(targetPath).exists() && (activeTarget != null || !targetPath.contains("/storage/"))) {
+                    targetPath
+                } else {
+                    internalPath
+                }
                 val stat = StatFs(statPath)
                 val totalBytes = stat.totalBytes
                 val availableBytes = stat.availableBytes
@@ -91,8 +97,11 @@ fun StorageHeroCard(
             StorageType.CUSTOM -> Pair("Custom Storage Directory", Icons.Default.Folder)
             StorageType.INTERNAL -> Pair("Internal Device Storage", Icons.Default.PhoneAndroid)
             null -> {
+                val internalPath = Environment.getExternalStorageDirectory().absolutePath
                 val path = storageDirectory?.absolutePath ?: ""
                 when {
+                    path.isBlank() || path.startsWith(internalPath) || path.startsWith("/storage/emulated/0") ->
+                        Pair("Internal Device Storage", Icons.Default.PhoneAndroid)
                     path.contains("usb", ignoreCase = true) || path.contains("otg", ignoreCase = true) ->
                         Pair("USB Drive Storage", Icons.Default.Usb)
                     path.matches(Regex(".*/storage/[A-Za-z0-9]{4}-[A-Za-z0-9]{4}.*")) ->
