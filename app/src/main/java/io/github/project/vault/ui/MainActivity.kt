@@ -157,7 +157,7 @@ class MainActivity : ComponentActivity() {
                             ) { innerPadding ->
                                 HorizontalPager(
                                     state = pagerState,
-                                    beyondBoundsPageCount = screens.size - 1,
+                                    beyondBoundsPageCount = 1,
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .padding(innerPadding)

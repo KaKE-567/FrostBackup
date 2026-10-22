@@ -3,7 +3,9 @@ package io.github.project.vault.ui.screens
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -620,7 +622,11 @@ private fun ColorButtonPill(
                 )
             }
 
-            val scale by animateFloatAsState(targetValue = if (isSelected) 1.05f else 1.0f, label = "button_scale")
+            val scale by animateFloatAsState(
+                targetValue = if (isSelected) 1.05f else 1.0f,
+                animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+                label = "button_scale"
+            )
 
             Box(
                 modifier = Modifier.graphicsLayer {
@@ -629,12 +635,7 @@ private fun ColorButtonPill(
                 },
                 contentAlignment = Alignment.Center
             ) {
-                // Animated Selected State: Outer Ring + Center Checkmark
-                AnimatedVisibility(
-                    visible = isSelected,
-                    enter = fadeIn() + scaleIn(initialScale = 0.75f),
-                    exit = fadeOut() + scaleOut(targetScale = 0.75f)
-                ) {
+                if (isSelected) {
                     Box(
                         modifier = Modifier
                             .size(52.dp)
@@ -656,14 +657,7 @@ private fun ColorButtonPill(
                             )
                         }
                     }
-                }
-
-                // Animated Unselected State: Inner Solid Primary Dot
-                AnimatedVisibility(
-                    visible = !isSelected,
-                    enter = fadeIn() + scaleIn(initialScale = 0.75f),
-                    exit = fadeOut() + scaleOut(targetScale = 0.75f)
-                ) {
+                } else {
                     Box(
                         modifier = Modifier
                             .size(18.dp)
