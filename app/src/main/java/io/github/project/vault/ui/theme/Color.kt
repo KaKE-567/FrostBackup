@@ -107,7 +107,12 @@ private fun hslToColor(h: Float, s: Float, l: Float, alpha: Float = 1f): Color {
         normH < 300f -> Triple(x, 0f, c)
         else -> Triple(c, 0f, x)
     }
-    return Color(r = (r + m).coerceIn(0f, 1f), g = (g + m).coerceIn(0f, 1f), b = (b + m).coerceIn(0f, 1f), alpha = alpha)
+    return Color(
+        red = (r + m).coerceIn(0f, 1f),
+        green = (g + m).coerceIn(0f, 1f),
+        blue = (b + m).coerceIn(0f, 1f),
+        alpha = alpha
+    )
 }
 
 fun ColorScheme.amoledBackground(amoled: Boolean): ColorScheme =
