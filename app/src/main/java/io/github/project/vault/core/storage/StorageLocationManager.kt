@@ -93,19 +93,42 @@ object StorageLocationManager {
                     val desc = volume.getDescription(context) ?: "External Drive"
                     val isUsb = desc.contains("USB", ignoreCase = true) || desc.contains("OTG", ignoreCase = true) || desc.contains("Pendrive", ignoreCase = true)
                     val type = if (isUsb) StorageType.USB_DRIVE else StorageType.SD_CARD
-                    val mountPath = "/storage/$uuid"
+
+                    // Removable drives on Android may be mounted under /mnt/media_rw/$uuid or /storage/$uuid
+                    val storagePath = "/storage/$uuid"
+                    val mediaRwPath = "/mnt/media_rw/$uuid"
+                    val validMountPath = when {
+                        File(mediaRwPath).exists() -> mediaRwPath
+                        File(storagePath).exists() -> storagePath
+                        else -> mediaRwPath
+                    }
 
                     var total = 0L
                     var free = 0L
                     var mounted = false
-                    try {
-                        val stat = StatFs(mountPath)
-                        total = stat.totalBytes
-                        free = stat.availableBytes
-                        mounted = total > 0
-                    } catch (_: Exception) {}
 
-                    val backupDirPath = "$mountPath/$DEFAULT_BACKUP_SUBDIR"
+                    // Use root df first to get actual hardware filesystem block stats
+                    val dfRes = RootShell.execute("df -k $validMountPath 2>/dev/null | tail -n 1")
+                    if (dfRes.isSuccess && dfRes.stdout.isNotBlank()) {
+                        val parts = dfRes.stdout.trim().split("\\s+".toRegex())
+                        if (parts.size >= 4) {
+                            total = (parts[1].toLongOrNull() ?: 0L) * 1024L
+                            free = (parts[3].toLongOrNull() ?: 0L) * 1024L
+                            mounted = total > 0
+                        }
+                    }
+
+                    // Fallback to StatFs if df didn't produce total
+                    if (total <= 0L && File(validMountPath).exists()) {
+                        try {
+                            val stat = StatFs(validMountPath)
+                            total = stat.totalBytes
+                            free = stat.availableBytes
+                            mounted = total > 0
+                        } catch (_: Exception) {}
+                    }
+
+                    val backupDirPath = "$validMountPath/$DEFAULT_BACKUP_SUBDIR"
                     targets.add(
                         StorageTarget(
                             id = uuid,
@@ -114,18 +137,18 @@ object StorageLocationManager {
                             backupDirectoryPath = backupDirPath,
                             totalBytes = total,
                             freeBytes = free,
-                            isMounted = mounted || File(mountPath).exists()
+                            isMounted = mounted || File(validMountPath).exists()
                         )
                     )
                 }
             }
         } catch (_: Exception) {}
 
-        // 3. Root Fallback: Inspect /storage and /mnt/media_rw for external volumes
+        // 3. Root Fallback: Inspect /mnt/media_rw and /storage for removable volumes
         try {
-            val storageDir = File("/storage")
-            val subdirs = storageDir.listFiles()
-            if (subdirs != null) {
+            val searchDirs = listOf(File("/mnt/media_rw"), File("/storage"))
+            for (parentDir in searchDirs) {
+                val subdirs = parentDir.listFiles() ?: continue
                 for (dir in subdirs) {
                     val name = dir.name
                     if (name == "emulated" || name == "self" || name == "knox") continue
@@ -133,26 +156,31 @@ object StorageLocationManager {
 
                     var total = 0L
                     var free = 0L
-                    try {
-                        val stat = StatFs(dir.absolutePath)
-                        total = stat.totalBytes
-                        free = stat.availableBytes
-                    } catch (_: Exception) {
-                        // Fallback root stat
-                        val dfRes = RootShell.execute("df ${dir.absolutePath} | tail -n 1")
-                        if (dfRes.isSuccess && dfRes.stdout.isNotBlank()) {
-                            val parts = dfRes.stdout.split("\\s+".toRegex())
-                            if (parts.size >= 4) {
-                                total = (parts[1].toLongOrNull() ?: 0L) * 1024L
-                                free = (parts[3].toLongOrNull() ?: 0L) * 1024L
-                            }
+                    var mounted = false
+
+                    val dfRes = RootShell.execute("df -k ${dir.absolutePath} 2>/dev/null | tail -n 1")
+                    if (dfRes.isSuccess && dfRes.stdout.isNotBlank()) {
+                        val parts = dfRes.stdout.trim().split("\\s+".toRegex())
+                        if (parts.size >= 4) {
+                            total = (parts[1].toLongOrNull() ?: 0L) * 1024L
+                            free = (parts[3].toLongOrNull() ?: 0L) * 1024L
+                            mounted = total > 0
                         }
                     }
 
+                    if (total <= 0L) {
+                        try {
+                            val stat = StatFs(dir.absolutePath)
+                            total = stat.totalBytes
+                            free = stat.availableBytes
+                            mounted = total > 0
+                        } catch (_: Exception) {}
+                    }
+
                     if (total > 0 || dir.exists()) {
-                        val isUsb = name.startsWith("usb", ignoreCase = true)
+                        val isUsb = name.startsWith("usb", ignoreCase = true) || parentDir.name == "media_rw"
                         val type = if (isUsb) StorageType.USB_DRIVE else StorageType.SD_CARD
-                        val label = if (type == StorageType.USB_DRIVE) "USB Pendrive ($name)" else "SD Card ($name)"
+                        val label = if (type == StorageType.USB_DRIVE) "USB Drive ($name)" else "MicroSD Card ($name)"
                         targets.add(
                             StorageTarget(
                                 id = name,
@@ -161,7 +189,7 @@ object StorageLocationManager {
                                 backupDirectoryPath = "${dir.absolutePath}/$DEFAULT_BACKUP_SUBDIR",
                                 totalBytes = total,
                                 freeBytes = free,
-                                isMounted = true
+                                isMounted = mounted || dir.exists()
                             )
                         )
                     }

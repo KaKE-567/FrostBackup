@@ -65,14 +65,31 @@ fun StorageHeroCard(
                 val fraction = (usedBytes.toDouble() / totalBytes.toDouble()).coerceIn(0.0, 1.0).toFloat()
                 Triple(total, free, fraction)
             } else {
-                val targetPath = storageDirectory?.absolutePath ?: Environment.getDataDirectory().path
-                val file = File(targetPath)
-                val statPath = if (file.exists()) file.absolutePath else Environment.getDataDirectory().path
-                val stat = StatFs(statPath)
-                val totalBytes = stat.totalBytes
-                val availableBytes = stat.availableBytes
-                val usedBytes = (totalBytes - availableBytes).coerceAtLeast(0L)
+                val targetPath = storageDirectory?.absolutePath ?: Environment.getExternalStorageDirectory().path
+                var totalBytes = 0L
+                var availableBytes = 0L
 
+                // If pointing to removable storage, use root df to get true partition size
+                if (targetPath.contains("/storage/") || targetPath.contains("/mnt/media_rw/")) {
+                    val dfRes = io.github.project.vault.core.root.RootShell.execute("df -k $targetPath 2>/dev/null | tail -n 1")
+                    if (dfRes.isSuccess && dfRes.stdout.isNotBlank()) {
+                        val parts = dfRes.stdout.trim().split("\\s+".toRegex())
+                        if (parts.size >= 4) {
+                            totalBytes = (parts[1].toLongOrNull() ?: 0L) * 1024L
+                            availableBytes = (parts[3].toLongOrNull() ?: 0L) * 1024L
+                        }
+                    }
+                }
+
+                if (totalBytes <= 0L) {
+                    val fallbackFile = File(targetPath)
+                    val statPath = if (fallbackFile.exists()) fallbackFile.absolutePath else Environment.getExternalStorageDirectory().path
+                    val stat = StatFs(statPath)
+                    totalBytes = stat.totalBytes
+                    availableBytes = stat.availableBytes
+                }
+
+                val usedBytes = (totalBytes - availableBytes).coerceAtLeast(0L)
                 val total = totalBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
                 val free = availableBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
                 val fraction = if (totalBytes > 0) (usedBytes.toDouble() / totalBytes.toDouble()).coerceIn(0.0, 1.0).toFloat() else 0.5f
