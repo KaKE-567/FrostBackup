@@ -110,9 +110,9 @@ class AppRepository(
         val backupMap = mutableMapOf<String, BackupMetadata>()
         for (b in backups) {
             val pkg = b.packageName.trim().lowercase()
-            if (pkg.isNotBlank()) map.putIfAbsent(pkg, b)
+            if (pkg.isNotBlank()) backupMap.putIfAbsent(pkg, b)
             val slug = BackupMetadata.extractAppSlugFromArchive(b.archiveFileName).lowercase().replace("-", "_")
-            if (slug.isNotBlank()) map.putIfAbsent(slug, b)
+            if (slug.isNotBlank()) backupMap.putIfAbsent(slug, b)
         }
 
         val enriched = apps.map { app ->

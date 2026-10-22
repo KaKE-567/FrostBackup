@@ -78,6 +78,7 @@ import io.github.project.vault.core.backup.BackupResult
 import io.github.project.vault.core.root.RootShell
 import io.github.project.vault.core.storage.StorageLocationManager
 import io.github.project.vault.data.model.AppInfo
+import io.github.project.vault.data.model.BackupMetadata
 import io.github.project.vault.data.model.StorageTarget
 import io.github.project.vault.data.repository.AppRepository
 import io.github.project.vault.data.repository.BackupRepository
