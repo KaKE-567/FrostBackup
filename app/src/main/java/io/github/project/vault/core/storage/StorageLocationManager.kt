@@ -36,18 +36,13 @@ object StorageLocationManager {
     private fun getActiveMounts(): List<MountEntry> {
         val mounts = mutableListOf<MountEntry>()
         val mountsFile = File("/proc/mounts")
-        val lines = if (mountsFile.exists() && mountsFile.canRead()) {
-            try { mountsFile.readLines() } catch (_: Exception) { emptyList() }
-        } else {
+        val lines = try {
+            if (mountsFile.exists() && mountsFile.canRead()) mountsFile.readLines() else emptyList()
+        } catch (_: Exception) {
             emptyList()
         }
 
-        val sourceLines = if (lines.isNotEmpty()) lines else {
-            val res = RootShell.execute("cat /proc/mounts 2>/dev/null")
-            if (res.isSuccess) res.stdout.lines() else emptyList()
-        }
-
-        for (line in sourceLines) {
+        for (line in lines) {
             val parts = line.trim().split("\\s+".toRegex())
             if (parts.size >= 3) {
                 val device = parts[0]
@@ -75,7 +70,40 @@ object StorageLocationManager {
         return mounts
     }
 
-    private fun tryAutoMountUnmountedDrive(uuid: String) {
+    private suspend fun getActiveMountsWithRootFallback(): List<MountEntry> {
+        val mounts = getActiveMounts().toMutableList()
+        if (mounts.isEmpty()) {
+            val res = RootShell.execute("cat /proc/mounts 2>/dev/null")
+            if (res.isSuccess) {
+                for (line in res.stdout.lines()) {
+                    val parts = line.trim().split("\\s+".toRegex())
+                    if (parts.size >= 3) {
+                        val device = parts[0]
+                        val mountPoint = parts[1]
+                        val fsType = parts[2]
+
+                        if (fsType in listOf(
+                                "tmpfs", "rootfs", "devpts", "proc", "sysfs", "selinuxfs",
+                                "cgroup", "cgroup2", "configfs", "bpf", "pstore", "tracefs",
+                                "debugfs", "functionfs", "overlay"
+                            )
+                        ) {
+                            continue
+                        }
+
+                        if (mountPoint == "/" || mountPoint == "/storage" || mountPoint == "/storage/self" || mountPoint == "/mnt") {
+                            continue
+                        }
+
+                        mounts.add(MountEntry(device, mountPoint, fsType))
+                    }
+                }
+            }
+        }
+        return mounts
+    }
+
+    private suspend fun tryAutoMountUnmountedDrive(uuid: String) {
         val blkidRes = RootShell.execute("blkid 2>/dev/null | grep -i \"$uuid\" | head -n 1")
         var dev = ""
         if (blkidRes.isSuccess && blkidRes.stdout.isNotBlank()) {
@@ -99,7 +127,7 @@ object StorageLocationManager {
         }
     }
 
-    private fun cleanGhostDirectories(activeMountPoints: Set<String>) {
+    private suspend fun cleanGhostDirectories(activeMountPoints: Set<String>) {
         val searchParents = listOf(File("/storage"), File("/mnt/media_rw"), File("/mnt/runtime/default"))
         val uuidRegex = Regex("^[A-Za-z0-9]{4}-[A-Za-z0-9]{4}$|^[A-Za-z0-9]{8}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{12}$")
         for (parent in searchParents) {
@@ -117,7 +145,7 @@ object StorageLocationManager {
         }
     }
 
-    private fun getMountStats(mountPath: String): Pair<Long, Long> {
+    private suspend fun getMountStats(mountPath: String): Pair<Long, Long> {
         var total = 0L
         var free = 0L
 
@@ -142,11 +170,6 @@ object StorageLocationManager {
         return Pair(total, free)
     }
 
-    private fun extractUuidFromPath(path: String): String? {
-        val match = Regex(".*/(?:storage|mnt/media_rw|mnt/runtime/[^/]+)/([A-Za-z0-9]{4}-[A-Za-z0-9]{4}|[A-Za-z0-9]{8}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{12})").find(path)
-        return match?.groupValues?.get(1)
-    }
-
     fun getBackupDirectory(context: Context): File {
         val prefs = getPrefs(context)
         val savedPath = prefs.getString(KEY_SELECTED_PATH, null)
@@ -168,17 +191,6 @@ object StorageLocationManager {
         }
 
         if (!isMounted) {
-            val uuid = extractUuidFromPath(savedPath)
-            if (uuid != null) {
-                tryAutoMountUnmountedDrive(uuid)
-                val updatedMounts = getActiveMounts()
-                val nowMounted = updatedMounts.any { mount ->
-                    savedPath == mount.mountPoint || savedPath.startsWith("${mount.mountPoint}/")
-                }
-                if (nowMounted) {
-                    return File(savedPath)
-                }
-            }
             // Drive unplugged or unmounted: safely fall back to internal storage
             return defaultDir
         }
@@ -234,7 +246,7 @@ object StorageLocationManager {
         }
 
         // 3. Inspect active mounts from /proc/mounts
-        val activeMounts = getActiveMounts()
+        val activeMounts = getActiveMountsWithRootFallback()
         val activeMountPaths = activeMounts.map { it.mountPoint }.toSet()
 
         // Clean any ghost directories left behind by unplugged USB drives
@@ -264,9 +276,9 @@ object StorageLocationManager {
 
             val isMmc = mount.device.contains("mmcblk", ignoreCase = true)
             val isUsbDevice = mount.device.contains("/sd", ignoreCase = true) || mount.device.contains("public:8", ignoreCase = true)
-            val descIsUsb = volDesc?.contains("USB", ignoreCase = true) == true ||
-                    volDesc?.contains("OTG", ignoreCase = true) ||
-                    volDesc?.contains("Pendrive", ignoreCase = true)
+            val descIsUsb = (volDesc?.contains("USB", ignoreCase = true) == true) ||
+                    (volDesc?.contains("OTG", ignoreCase = true) == true) ||
+                    (volDesc?.contains("Pendrive", ignoreCase = true) == true)
 
             val type = when {
                 descIsUsb || isUsbDevice -> StorageType.USB_DRIVE
