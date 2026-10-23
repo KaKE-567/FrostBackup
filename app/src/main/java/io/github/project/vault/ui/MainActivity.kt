@@ -42,6 +42,7 @@ import androidx.lifecycle.lifecycleScope
 import io.github.project.vault.core.cloud.OAuthManager
 import io.github.project.vault.data.repository.AppRepository
 import io.github.project.vault.data.repository.BackupRepository
+import io.github.project.vault.data.repository.TelephonyRepository
 import io.github.project.vault.ui.components.FrostedBackground
 import io.github.project.vault.ui.navigation.Screen
 import io.github.project.vault.ui.screens.AppListScreen
@@ -49,6 +50,7 @@ import io.github.project.vault.ui.screens.CloudScreen
 import io.github.project.vault.ui.screens.RestoreScreen
 import io.github.project.vault.ui.screens.RootGateScreen
 import io.github.project.vault.ui.screens.SettingsScreen
+import io.github.project.vault.ui.screens.TelephonyScreen
 import io.github.project.vault.ui.theme.AppVaultTheme
 import io.github.project.vault.ui.theme.ThemeMode
 import io.github.project.vault.ui.theme.ThemePreference
@@ -98,9 +100,11 @@ class MainActivity : ComponentActivity() {
                             val pagerScope = rememberCoroutineScope()
                             val backupRepository = remember { BackupRepository(applicationContext) }
                             val appRepository = remember { AppRepository(applicationContext, backupRepository) }
+                            val telephonyRepository = remember { TelephonyRepository(applicationContext, backupRepository) }
 
                             val screens = listOf(
                                 Screen.Apps,
+                                Screen.Telephony,
                                 Screen.Restore,
                                 Screen.Cloud,
                                 Screen.Settings
@@ -169,12 +173,16 @@ class MainActivity : ComponentActivity() {
                                             backupRepository = backupRepository,
                                             isSelected = (pagerState.currentPage == 0)
                                         )
-                                        1 -> RestoreScreen(
-                                            backupRepository = backupRepository,
+                                        1 -> TelephonyScreen(
+                                            telephonyRepository = telephonyRepository,
                                             isSelected = (pagerState.currentPage == 1)
                                         )
-                                        2 -> CloudScreen(backupRepository = backupRepository)
-                                        3 -> SettingsScreen(
+                                        2 -> RestoreScreen(
+                                            backupRepository = backupRepository,
+                                            isSelected = (pagerState.currentPage == 2)
+                                        )
+                                        3 -> CloudScreen(backupRepository = backupRepository)
+                                        4 -> SettingsScreen(
                                             backupRepository = backupRepository,
                                             currentThemeMode = currentThemeMode,
                                             currentKeyColor = currentKeyColor,
