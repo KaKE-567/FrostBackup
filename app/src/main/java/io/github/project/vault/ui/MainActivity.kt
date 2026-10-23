@@ -37,7 +37,9 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import io.github.project.vault.core.cloud.OAuthManager
 import io.github.project.vault.data.repository.AppRepository
@@ -152,7 +154,17 @@ class MainActivity : ComponentActivity() {
                                                     }
                                                 },
                                                 icon = { Icon(screen.icon, contentDescription = screen.title) },
-                                                label = { Text(screen.title) }
+                                                label = {
+                                                    Text(
+                                                        text = screen.title,
+                                                        maxLines = 1,
+                                                        softWrap = false,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        style = MaterialTheme.typography.labelSmall.copy(
+                                                            fontSize = if (screen.title.length > 8) 10.sp else 11.sp
+                                                        )
+                                                    )
+                                                }
                                             )
                                         }
                                     }
