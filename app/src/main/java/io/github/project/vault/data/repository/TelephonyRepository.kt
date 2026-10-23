@@ -30,9 +30,14 @@ class TelephonyRepository(
         val telephonyDir = File(baseBackupDir.parentFile ?: baseBackupDir, "Telephony")
         if (!telephonyDir.exists()) {
             telephonyDir.mkdirs()
-            RootShell.execute("mkdir -p \"${telephonyDir.absolutePath}\" && chmod 777 \"${telephonyDir.absolutePath}\" 2>/dev/null")
         }
         return telephonyDir
+    }
+
+    suspend fun ensureTelephonyDirectoryExists(): File = withContext(Dispatchers.IO) {
+        val dir = getTelephonyDirectory()
+        RootShell.execute("mkdir -p \"${dir.absolutePath}\" && chmod 777 \"${dir.absolutePath}\" 2>/dev/null")
+        dir
     }
 
     suspend fun getDeviceStats(): Pair<Int, Int> = withContext(Dispatchers.IO) {
@@ -42,7 +47,7 @@ class TelephonyRepository(
     }
 
     suspend fun refreshBackups(): List<TelephonyArchiveMetadata> = withContext(Dispatchers.IO) {
-        val dir = getTelephonyDirectory()
+        val dir = ensureTelephonyDirectoryExists()
         val directFiles = dir.listFiles { file -> file.extension == "vault" }
 
         val filePaths: List<String> = if (!directFiles.isNullOrEmpty()) {
@@ -109,7 +114,7 @@ class TelephonyRepository(
     ): Result<TelephonyArchiveMetadata> = withContext(Dispatchers.IO) {
         val result = TelephonyEngine.backup(
             context = context,
-            destinationDir = getTelephonyDirectory(),
+            destinationDir = ensureTelephonyDirectoryExists(),
             includeSms = includeSms,
             includeCalls = includeCalls,
             onProgress = onProgress
