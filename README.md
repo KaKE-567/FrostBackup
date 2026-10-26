@@ -4,6 +4,7 @@
 
 # FrostBackup
 
+[![Official Website](https://img.shields.io/badge/Website-kake--567.github.io%2FFrostBackup-00f0ff?logo=firefoxbrowser&logoColor=white)](https://kake-567.github.io/FrostBackup/)
 [![GitHub Release](https://img.shields.io/github/v/release/KaKE-567/FrostBackup?color=00bcd4&label=Latest%20Release&logo=github)](https://github.com/KaKE-567/FrostBackup/releases/latest)
 [![GitHub Downloads](https://img.shields.io/github/downloads/KaKE-567/FrostBackup/total?color=4caf50&logo=android)](https://github.com/KaKE-567/FrostBackup/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
@@ -14,7 +15,7 @@
 
 **A modern, blazing-fast, Free and Open Source (GPL-3.0) Android root backup application that truly preserves application login sessions, device signatures, and Keystore cryptographic tokens across ROM flashes and migrations.**
 
-[Download Latest APK](https://github.com/KaKE-567/FrostBackup/releases/latest) • [Report Issue](https://github.com/KaKE-567/FrostBackup/issues) • [Changelog](https://github.com/KaKE-567/FrostBackup/releases)
+[🌐 Official Website](https://kake-567.github.io/FrostBackup/) • [Download Latest APK](https://github.com/KaKE-567/FrostBackup/releases/latest) • [Documentation & Guide](https://kake-567.github.io/FrostBackup/#guide) • [Report Issue](https://github.com/KaKE-567/FrostBackup/issues) • [Changelog](https://github.com/KaKE-567/FrostBackup/releases)
 
 ---
 
