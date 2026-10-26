@@ -62,11 +62,11 @@ fun BackupProgressDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                LinearProgressIndicator(
-                    progress = { progressFraction.coerceIn(0f, 1f) },
+                PixelSquigglyProgressIndicator(
+                    progress = progressFraction,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(8.dp),
+                        .padding(vertical = 4.dp)
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))

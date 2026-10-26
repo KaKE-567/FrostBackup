@@ -167,10 +167,27 @@ class BackupEngine(private val context: Context) {
             // 11. Google Drive Cloud Upload
             var cloudUploaded = false
             if (config.uploadToCloud) {
-                onProgress(BackupProgress("Uploading to Google Drive…", 0.95f, app.appName))
+                val uploadFile = File(finalBundlePath)
+                val totalBytes = uploadFile.length().coerceAtLeast(1L)
+                val totalMb = totalBytes / (1024f * 1024f)
+                onProgress(BackupProgress("Starting Google Drive upload…", 0.90f, app.appName))
                 val drive = GoogleDriveManager(context)
                 if (drive.isConnected()) {
-                    val uploadSuccess = drive.uploadBackup(File(finalBundlePath), metadataString) {}
+                    val uploadSuccess = drive.uploadBackup(
+                        file = uploadFile,
+                        metadataJson = metadataString,
+                        onProgress = { uploadFrac ->
+                            val currentMb = (totalBytes * uploadFrac) / (1024f * 1024f)
+                            val percent = (uploadFrac * 100).toInt()
+                            val progressText = String.format(
+                                java.util.Locale.US,
+                                "Uploading to Drive: %.1f / %.1f MB (%d%%)",
+                                currentMb, totalMb, percent
+                            )
+                            val totalFraction = 0.90f + (uploadFrac * 0.09f)
+                            onProgress(BackupProgress(progressText, totalFraction, app.appName))
+                        }
+                    )
                     if (uploadSuccess) {
                         cloudUploaded = true
                     } else {

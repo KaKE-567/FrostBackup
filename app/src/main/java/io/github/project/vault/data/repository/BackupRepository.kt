@@ -222,7 +222,10 @@ class BackupRepository(private val context: Context) {
         result.isSuccess
     }
 
-    suspend fun uploadToCloud(archiveFileName: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun uploadToCloud(
+        archiveFileName: String,
+        onProgress: (uploadedMb: Float, totalMb: Float, percent: Int, fraction: Float) -> Unit = { _, _, _, _ -> }
+    ): Boolean = withContext(Dispatchers.IO) {
         val backupDir = getBackupDirectory()
         val archiveFile = File(backupDir, archiveFileName)
         val metaResult = RootShell.execute("tar -xf \"${archiveFile.absolutePath}\" -O ./metadata.json 2>/dev/null || tar -xf \"${archiveFile.absolutePath}\" -O metadata.json 2>/dev/null")
@@ -237,7 +240,14 @@ class BackupRepository(private val context: Context) {
 
             val drive = GoogleDriveManager(context)
             if (!drive.isConnected()) return@withContext false
-            drive.uploadBackup(cacheStaging, metaString) {}
+            val totalBytes = cacheStaging.length().coerceAtLeast(1L)
+            val totalMb = totalBytes / (1024f * 1024f)
+
+            drive.uploadBackup(cacheStaging, metaString) { fraction ->
+                val currentMb = (totalBytes * fraction) / (1024f * 1024f)
+                val percent = (fraction * 100).toInt()
+                onProgress(currentMb, totalMb, percent, fraction)
+            }
         } catch (e: Exception) {
             false
         } finally {

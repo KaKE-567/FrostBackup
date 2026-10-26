@@ -52,6 +52,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -73,6 +74,7 @@ import io.github.project.vault.core.restore.RestoreResult
 import io.github.project.vault.core.root.RootShell
 import io.github.project.vault.data.model.BackupMetadata
 import io.github.project.vault.data.repository.AppRepository
+import io.github.project.vault.ui.components.BackupProgressDialog
 import io.github.project.vault.data.repository.BackupRepository
 import io.github.project.vault.ui.components.AppIcon
 import io.github.project.vault.ui.components.BackupProgressDialog
@@ -103,6 +105,12 @@ fun RestoreScreen(
     var passwordInput by remember { mutableStateOf("") }
     var showPasswordDialog by remember { mutableStateOf(false) }
     var showRebootDialog by remember { mutableStateOf(false) }
+
+    // Cloud upload progress state
+    var cloudUploadActive by remember { mutableStateOf(false) }
+    var cloudUploadAppName by remember { mutableStateOf("") }
+    var cloudUploadStatus by remember { mutableStateOf("") }
+    var cloudUploadProgress by remember { mutableFloatStateOf(0f) }
 
     suspend fun reloadBackups(forceRefresh: Boolean = false) {
         if (backups.isEmpty()) {
@@ -299,8 +307,15 @@ fun RestoreScreen(
                         },
                         onUploadToCloud = {
                             scope.launch {
-                                snackbarHostState.showSnackbar("Uploading ${item.appName} to Google Drive…")
-                                val ok = backupRepository.uploadToCloud(item.archiveFileName)
+                                cloudUploadAppName = item.appName
+                                cloudUploadStatus = "Connecting to Google Drive…"
+                                cloudUploadProgress = 0f
+                                cloudUploadActive = true
+                                val ok = backupRepository.uploadToCloud(item.archiveFileName) { uploadedMb, totalMb, percent, frac ->
+                                    cloudUploadStatus = String.format(Locale.US, "Uploading: %.1f / %.1f MB (%d%%)", uploadedMb, totalMb, percent)
+                                    cloudUploadProgress = frac
+                                }
+                                cloudUploadActive = false
                                 if (ok) {
                                     snackbarHostState.showSnackbar("Uploaded ${item.appName} to Google Drive!")
                                 } else {
@@ -394,6 +409,16 @@ fun RestoreScreen(
             currentApp = prog.currentApp,
             currentStep = prog.currentStep,
             progressFraction = prog.progressFraction
+        )
+    }
+
+    // Progress Dialog during cloud upload
+    if (cloudUploadActive) {
+        BackupProgressDialog(
+            title = "Uploading to Google Drive",
+            currentApp = cloudUploadAppName,
+            currentStep = cloudUploadStatus,
+            progressFraction = cloudUploadProgress
         )
     }
 }

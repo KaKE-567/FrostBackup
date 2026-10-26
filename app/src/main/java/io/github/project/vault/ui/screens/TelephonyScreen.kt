@@ -37,8 +37,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import io.github.project.vault.ui.components.PixelSquigglyProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -51,6 +51,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -96,6 +97,10 @@ fun TelephonyScreen(
     var activeProgress by remember { mutableStateOf<TelephonyProgress?>(null) }
     var targetRestoreArchive by remember { mutableStateOf<TelephonyArchiveMetadata?>(null) }
     var targetDeleteArchive by remember { mutableStateOf<TelephonyArchiveMetadata?>(null) }
+
+    var cloudUploadActive by remember { mutableStateOf(false) }
+    var cloudUploadStatus by remember { mutableStateOf("") }
+    var cloudUploadProgress by remember { mutableFloatStateOf(0f) }
 
     suspend fun refreshData() {
         isLoadingStats = true
@@ -446,7 +451,14 @@ fun TelephonyScreen(
                         onDelete = { targetDeleteArchive = archive },
                         onUpload = {
                             scope.launch {
-                                val ok = telephonyRepository.uploadToCloud(archive.archiveFileName)
+                                cloudUploadStatus = "Connecting to Google Drive…"
+                                cloudUploadProgress = 0f
+                                cloudUploadActive = true
+                                val ok = telephonyRepository.uploadToCloud(archive.archiveFileName) { uploadedMb, totalMb, percent, frac ->
+                                    cloudUploadStatus = String.format(java.util.Locale.US, "Uploading: %.1f / %.1f MB (%d%%)", uploadedMb, totalMb, percent)
+                                    cloudUploadProgress = frac
+                                }
+                                cloudUploadActive = false
                                 if (ok) {
                                     snackbarHostState.showSnackbar("Uploaded to Google Drive successfully")
                                 } else {
@@ -547,9 +559,11 @@ fun TelephonyScreen(
                     title = { Text("Creating Telephony Backup") },
                     text = {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            LinearProgressIndicator(
-                                progress = { prog.current.toFloat() / prog.total.coerceAtLeast(1) },
-                                modifier = Modifier.fillMaxWidth()
+                            PixelSquigglyProgressIndicator(
+                                progress = prog.current.toFloat() / prog.total.coerceAtLeast(1),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(text = prog.status, style = MaterialTheme.typography.bodyMedium)
@@ -564,9 +578,11 @@ fun TelephonyScreen(
                     title = { Text("Restoring Calls & SMS") },
                     text = {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            LinearProgressIndicator(
-                                progress = { prog.current.toFloat() / prog.total.coerceAtLeast(1) },
-                                modifier = Modifier.fillMaxWidth()
+                            PixelSquigglyProgressIndicator(
+                                progress = prog.current.toFloat() / prog.total.coerceAtLeast(1),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(text = prog.status, style = MaterialTheme.typography.bodyMedium)
@@ -593,6 +609,26 @@ fun TelephonyScreen(
                 )
             }
         }
+    }
+
+    if (cloudUploadActive) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Uploading to Google Drive") },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    PixelSquigglyProgressIndicator(
+                        progress = cloudUploadProgress,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(text = cloudUploadStatus, style = MaterialTheme.typography.bodyMedium)
+                }
+            },
+            confirmButton = {}
+        )
     }
 }
 

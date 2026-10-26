@@ -8,12 +8,18 @@ import com.google.android.gms.auth.GoogleAuthUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
+import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.Response
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okio.Buffer
+import okio.BufferedSink
+import okio.ForwardingSink
+import okio.buffer
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -256,7 +262,12 @@ class GoogleDriveManager(private val context: Context) : CloudProvider {
 
             val uploadLocation = initResponse.header("Location") ?: return@withContext false
 
-            val fileBody = file.asRequestBody("application/octet-stream".toMediaType())
+            val totalBytes = file.length().coerceAtLeast(1L)
+            val rawFileBody = file.asRequestBody("application/octet-stream".toMediaType())
+            val fileBody = ProgressRequestBody(rawFileBody) { bytesWritten, _ ->
+                val fraction = (bytesWritten.toFloat() / totalBytes).coerceIn(0f, 1f)
+                onProgress(fraction)
+            }
             val uploadRequest = Request.Builder()
                 .url(uploadLocation)
                 .put(fileBody)
@@ -405,5 +416,36 @@ class GoogleDriveManager(private val context: Context) : CloudProvider {
             Log.e("GoogleDriveManager", "Exception deleting backup", e)
             false
         }
+    }
+}
+
+/**
+ * Custom OkHttp RequestBody wrapper to monitor bytes written to Okio sink and stream live upload progress.
+ */
+private class ProgressRequestBody(
+    private val delegate: RequestBody,
+    private val onProgress: (bytesWritten: Long, totalBytes: Long) -> Unit
+) : RequestBody() {
+    override fun contentType(): MediaType? = delegate.contentType()
+    override fun contentLength(): Long = delegate.contentLength()
+
+    override fun writeTo(sink: BufferedSink) {
+        val total = contentLength()
+        val countingSink = object : ForwardingSink(sink) {
+            private var bytesWritten = 0L
+            private var lastProgressReport = 0L
+
+            override fun write(source: Buffer, byteCount: Long) {
+                super.write(source, byteCount)
+                bytesWritten += byteCount
+                if (bytesWritten - lastProgressReport >= 64 * 1024 || bytesWritten == total) {
+                    lastProgressReport = bytesWritten
+                    onProgress(bytesWritten, total)
+                }
+            }
+        }
+        val bufferedSink = countingSink.buffer()
+        delegate.writeTo(bufferedSink)
+        bufferedSink.flush()
     }
 }

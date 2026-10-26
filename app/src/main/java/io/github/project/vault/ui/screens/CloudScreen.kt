@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -71,6 +72,8 @@ import io.github.project.vault.core.cloud.GoogleDriveManager
 import io.github.project.vault.core.cloud.OAuthManager
 import io.github.project.vault.data.repository.BackupRepository
 import io.github.project.vault.ui.components.AppIcon
+import io.github.project.vault.ui.components.BackupProgressDialog
+import java.util.Locale
 import io.github.project.vault.ui.components.StatusBadge
 import kotlinx.coroutines.launch
 import java.io.File
@@ -91,6 +94,11 @@ fun CloudScreen(
     var isConnected by remember { mutableStateOf(GoogleDriveManager.cachedIsConnected ?: driveManager.hasCachedConnection()) }
     var cloudBackups by remember { mutableStateOf(GoogleDriveManager.cachedBackups ?: emptyList()) }
     var isLoading by remember { mutableStateOf(isConnected && cloudBackups.isEmpty()) }
+
+    var downloadActive by remember { mutableStateOf(false) }
+    var downloadItemName by remember { mutableStateOf("") }
+    var downloadStatus by remember { mutableStateOf("") }
+    var downloadProgress by remember { mutableFloatStateOf(0f) }
 
     suspend fun refreshCloudState(forceRefresh: Boolean = false) {
         val connected = driveManager.isConnected()
@@ -501,8 +509,18 @@ fun CloudScreen(
                                         onClick = {
                                             scope.launch {
                                                 val dest = File(backupRepository.getBackupDirectory(), item.name)
-                                                snackbarHostState.showSnackbar("Downloading ${item.name}…")
-                                                val ok = driveManager.downloadBackup(item.fileId, dest) {}
+                                                downloadItemName = item.name
+                                                downloadStatus = "Connecting to Google Drive…"
+                                                downloadProgress = 0f
+                                                downloadActive = true
+                                                val totalMb = item.sizeBytes / (1024f * 1024f)
+                                                val ok = driveManager.downloadBackup(item.fileId, dest) { frac ->
+                                                    val currentMb = totalMb * frac
+                                                    val percent = (frac * 100).toInt()
+                                                    downloadStatus = String.format(Locale.US, "Downloading: %.1f / %.1f MB (%d%%)", currentMb, totalMb, percent)
+                                                    downloadProgress = frac
+                                                }
+                                                downloadActive = false
                                                 if (ok) {
                                                     snackbarHostState.showSnackbar("Downloaded to local storage!")
                                                     backupRepository.refreshBackups(forceRefresh = true)
@@ -539,5 +557,14 @@ fun CloudScreen(
                 }
             }
         }
+    }
+
+    if (downloadActive) {
+        BackupProgressDialog(
+            title = "Downloading from Drive",
+            currentApp = downloadItemName,
+            currentStep = downloadStatus,
+            progressFraction = downloadProgress
+        )
     }
 }
