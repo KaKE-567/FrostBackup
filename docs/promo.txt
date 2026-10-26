@@ -10,7 +10,7 @@ Made an open source root backup app that keeps your logins alive after restoring
 Body:
 Hey guys,
 
-Like a lot of you, I've had issues with Titanium Backup and other backup tools logging me out of apps like Discord, WhatsApp, Twitter, and games every time I wipe my phone or switch ROMs on Android 13/14/15.
+Like a lot of you, I've had issues with Titanium Backup and other backup tools logging me out of apps like Discord, WhatsApp, Twitter, and games every time I wipe my phone or switch ROMs on Android 14/15/16/17.
 
 The main reason this happens on modern Android is because apps check their SSAID (Android ID) and Keystore keys. When you reinstall or restore normally, the OS assigns a new UID and a new Android ID, which invalidates your session on the server.
 
@@ -23,7 +23,7 @@ I made FrostBackup (free & GPLv3) to solve that:
 - Direct Google Drive sync so you don't need a PC.
 - Material 3 dark/AMOLED UI with a Pixel-style squiggly slider.
 
-Works with Magisk, KernelSU, and APatch.
+Works with Magisk, KernelSU, and APatch (Android 8.0 to 17+).
 
 Source code: https://github.com/KaKE-567/FrostBackup
 APK download: https://github.com/KaKE-567/FrostBackup/releases/latest

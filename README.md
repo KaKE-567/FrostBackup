@@ -9,7 +9,7 @@
 [![GitHub Downloads](https://img.shields.io/github/downloads/KaKE-567/FrostBackup/total?color=4caf50&logo=android)](https://github.com/KaKE-567/FrostBackup/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
 [![Root Support](https://img.shields.io/badge/Root-Magisk%20%7C%20KernelSU%20%7C%20APatch-orange.svg)](https://github.com/KaKE-567/FrostBackup)
-[![Android](https://img.shields.io/badge/Android-8.0%20--%2015%2B-brightgreen.svg?logo=android)](https://github.com/KaKE-567/FrostBackup)
+[![Android](https://img.shields.io/badge/Android-8.0%20--%2017%2B-brightgreen.svg?logo=android)](https://github.com/KaKE-567/FrostBackup)
 [![Kotlin](https://img.shields.io/badge/Kotlin-1.9.24-7f52ff.svg?logo=kotlin)](https://kotlinlang.org)
 [![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285f4.svg?logo=jetpackcompose)](https://developer.android.com/jetpack/compose)
 
@@ -25,7 +25,7 @@
 
 Most Android backup utilities—from legacy tools like Titanium Backup to modern file copiers—leave your apps broken upon restore: Discord asks you to log in again, WhatsApp requires SMS re-verification, Twitter loses its auth state, and games force you through introductory tutorials.
 
-**FrostBackup** was engineered specifically to solve the modern Android security architecture (Android 8.0 up to Android 15+). By coupling raw root access with intelligent system-level state migration, FrostBackup restores your apps into the exact running state they were in before you wiped your device.
+**FrostBackup** was engineered specifically to solve the modern Android security architecture (Android 8.0 up to Android 17+). By coupling raw root access with intelligent system-level state migration, FrostBackup restores your apps into the exact running state they were in before you wiped your device.
 
 ---
 
