@@ -463,7 +463,7 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.height(8.dp))
 
                             Text(
-                                text = "Version 1.0.1 (FOSS Release)\n" +
+                                text = "Version 1.0.2 (FOSS Release)\n" +
                                        "Preserves application login states using SSAID preservation and Keystore token migration.\n" +
                                        "Licensed under GNU General Public License v3.0 (GPL-3.0).",
                                 style = MaterialTheme.typography.bodySmall,
