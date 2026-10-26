@@ -1,0 +1,102 @@
+================================================================================
+                    ❄️ FROSTBACKUP PROMO TEMPLATES ❄️
+================================================================================
+
+================================================================================
+1. REDDIT (r/fossdroid, r/androidapps, r/Magisk, r/androidroot)
+================================================================================
+
+[TITLE]
+[DEV] FrostBackup — Free & Open Source Root Backup app that preserves login sessions, SSAID & Keystore tokens across ROM flashes
+
+[BODY]
+Hey everyone! 👋
+
+I got tired of restoring app data on new ROMs only to find myself logged out of Discord, Twitter, WhatsApp, and games because of Android's modern security architecture (SSAID mismatch & lost Keystore tokens).
+
+So I built **FrostBackup** — a 100% Free and Open Source (GPL-3.0) root backup solution built with Jetpack Compose & Material 3.
+
+### ⚡ What Makes It Different:
+* **True Login Session Retention:** Automatically migrates per-app SSAIDs (settings_ssaid.xml) and re-binds Keystore cryptographic keys (/data/misc/keystore/user_0/) to the newly assigned Linux UIDs upon restore.
+* **Calls & SMS Tab:** Back up call logs and SMS messages via direct SQLite (mmssms.db, calllog.db) with smart deduplication on restore.
+* **Pixel Squiggly Slider UI:** Features Google Pixel-style undulating wavy progress bars, Dynamic Monet theming, and pure black AMOLED mode.
+* **Live Google Drive Cloud Sync:** Direct REST v3 upload with real-time streaming progress (e.g. 45.2 / 106.0 MB).
+* **Military-Grade Encryption:** Local AES-256-GCM authenticated cipher with PBKDF2 (65,536 rounds).
+* **Root Support:** Works out-of-the-box on Magisk, KernelSU, and APatch (Android 8.0 to 15+).
+
+🌐 **Website & Guides:** https://kake-567.github.io/FrostBackup/
+💻 **Source Code:** https://github.com/KaKE-567/FrostBackup
+📦 **Download APK (v1.0.1):** https://github.com/KaKE-567/FrostBackup/releases/latest
+
+Compatible with **Obtainium** for automatic updates! Would love to hear your thoughts and feedback!
+
+
+================================================================================
+2. XDA DEVELOPERS (Android Apps and Games / Magisk Tools)
+================================================================================
+
+[TITLE]
+[APP][ROOT][GPL-3.0] FrostBackup v1.0.1 — Modern Backup that Preserves App Logins, SSAID & Keystore Tokens (Android 8–15+)
+
+[BODY]
+[CENTER]
+[B][SIZE=6]❄️ FrostBackup[/SIZE][/B]
+[SIZE=4]A modern, Free and Open Source (GPL-3.0) root backup application that preserves app login sessions across ROM flashes[/SIZE]
+
+[URL='https://kake-567.github.io/FrostBackup/']🌐 Official Website[/URL] • [URL='https://github.com/KaKE-567/FrostBackup']💻 GitHub Repository[/URL] • [URL='https://github.com/KaKE-567/FrostBackup/releases/latest']📦 Download Latest APK[/URL]
+[/CENTER]
+
+---
+
+[B][SIZE=4]⚡ The Problem FrostBackup Solves:[/SIZE][/B]
+Legacy backup apps (Titanium Backup, basic data copiers) often leave you logged out of Discord, WhatsApp, Twitter, Steam, and games after restoring.
+
+On modern Android (Android 8 to 15+), app sessions depend on hardware signatures and cryptographic keys. FrostBackup addresses this directly:
+1. [B]SSAID Preservation:[/B] Captures and restores per-app Android IDs ([ICODE]settings_ssaid.xml[/ICODE]) before first launch so apps don't detect a device change.
+2. [B]Keystore Token Migration:[/B] Backs up system-level Keystore cryptographic keys and dynamically remaps them to newly assigned Linux UIDs upon restore.
+3. [B]SELinux & UID Auto-Healing:[/B] Automatically executes recursive [ICODE]restorecon -R[/ICODE] and [ICODE]chown -R[/ICODE] so restored apps never crash with permission denials.
+
+---
+
+[B][SIZE=4]🌟 Key Features:[/SIZE][/B]
+• [B]Universal Root Support:[/B] Seamlessly works with [B]Magisk[/B], [B]KernelSU[/B], and [B]APatch[/B].
+• [B]Dedicated Calls & SMS Tab:[/B] Dual-engine (Root SQLite [ICODE]mmssms.db[/ICODE] + ContentProvider) with smart deduplicated restore.
+• [B]Zero-Knowledge AES-256-GCM Encryption:[/B] PBKDF2 with 65,536 iterations.
+• [B]Direct Google Drive Sync:[/B] Resumable chunked uploads directly into your personal Drive with live MB/percent progress tracking.
+• [B]Pixel Squiggly UI & AMOLED Mode:[/B] Material 3 with animated squiggly progress waves, 15 preset accents, Dynamic Monet, and pure black #000000 dark mode.
+
+---
+
+[B][SIZE=4]📥 Downloads & Links:[/SIZE][/B]
+• [B]Latest Release (v1.0.1):[/B] [URL]https://github.com/KaKE-567/FrostBackup/releases/latest[/URL]
+• [B]Documentation & Guide:[/B] [URL]https://kake-567.github.io/FrostBackup/#guide[/URL]
+• [B]License:[/B] GNU General Public License v3.0
+
+[I]Feedback, suggestions, and bug reports are very welcome! If you like the project, please leave a ⭐ on GitHub![/I]
+
+
+================================================================================
+3. TELEGRAM CHANNEL POST
+================================================================================
+
+[CAPTION]
+❄️ FrostBackup v1.0.1 Update Released! 🚀
+
+A modern, 100% Free & Open Source (GPL-3.0) Android root backup tool built for modern Android (Android 8 to 15+).
+
+Tired of Titanium Backup or basic copiers logging you out of Discord, WhatsApp, Twitter, and games every time you restore? FrostBackup fixes the root cause!
+
+⚡ Highlights:
+• SSAID Preservation & Keystore Token Migration — Apps stay logged in across ROM flashes!
+• Pixel-Style Squiggly Wave Progress Bar — Authentic animated Android 13/14+ slider!
+• Live Google Drive Streaming Uploads — Real-time MB and percentage tracking!
+• Dual-engine Calls & SMS Backup/Restore tab with deduplication
+• Military-grade AES-256-GCM encryption & AMOLED pure black mode
+• Supports Magisk, KernelSU & APatch
+
+🌐 Website: https://kake-567.github.io/FrostBackup/
+💻 GitHub: https://github.com/KaKE-567/FrostBackup
+📦 Releases: https://github.com/KaKE-567/FrostBackup/releases/latest
+
+Download the APK file attached below 👇
+
