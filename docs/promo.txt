@@ -20,7 +20,7 @@ I made FrostBackup (free & GPLv3) to solve that:
 - Fixes SELinux context and permissions automatically so nothing crashes.
 - Has a Calls & SMS backup tab with deduplication so you don't get duplicate texts when restoring.
 - Optional local AES-256 encryption.
-- Direct Google Drive sync so you don't need a PC.
+- Direct Google Drive sync so you don't need a PC. (Note: when signing in with Google, make sure to check the box to grant Google Drive file access permission so it can create its backup folder).
 - Material 3 dark/AMOLED UI with a Pixel-style squiggly slider.
 
 Works with Magisk, KernelSU, and APatch (Android 8.0 to 17+).
