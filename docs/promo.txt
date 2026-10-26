@@ -39,19 +39,20 @@ Title:
 FrostBackup v1.0.1 is out!
 
 Body:
-Hey all, just released FrostBackup v1.0.1.
+Hey all, just released FrostBackup v1.0.1!
 
-It's an open source root backup app (GPLv3) made specifically for Android 8 to 15+. Unlike older backup apps, it preserves your logins (Discord, WhatsApp, Twitter, etc.) by backing up SSAID and remapping Keystore keys.
+It's an open-source root backup app (GPLv3) built specifically for Android 8.0 up to 17+. Unlike older backup tools that log you out of everything, it keeps your app sessions alive (Discord, WhatsApp, Telegram, Twitter, games) by backing up each app's SSAID and remapping hardware Keystore keys to the new Android UID on restore.
 
-What's in this build:
-- Fixed session loss (SSAID + Keystore UID remapping)
-- Calls and SMS backup tab with deduplication
-- Pixel-style squiggly progress slider
-- Live Google Drive upload/download progress
-- AES-256 encryption + AMOLED pure black theme
-- Works on Magisk, KernelSU, and APatch
+Key Highlights:
+• Keep Logins Intact: Preserves SSAID & remaps Keystore keys so you don't get logged out after a wipe.
+• Calls & SMS: Complete call history and text backup with automatic deduplication.
+• Cloud Sync: Direct Google Drive backup/restore with live streaming progress.
+• Modern UI: Material 3 dark/AMOLED theme with Pixel-style squiggly progress slider.
+• Security: Optional local AES-256-GCM zero-knowledge encryption.
+• Root Support: Magisk, KernelSU, APatch.
 
-GitHub: https://github.com/KaKE-567/FrostBackup
-Website: https://kake-567.github.io/FrostBackup/
-
-APK attached below!
+Links:
+• GitHub: https://github.com/KaKE-567/FrostBackup
+• Releases: https://github.com/KaKE-567/FrostBackup/releases/latest
+• Website: https://kake-567.github.io/FrostBackup/
+• Support Group: https://t.me/kake_discussion
