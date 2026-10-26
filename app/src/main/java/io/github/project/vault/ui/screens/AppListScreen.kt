@@ -256,18 +256,10 @@ fun AppListScreen(
                             )
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                            containerColor = MaterialTheme.colorScheme.surface,
                             titleContentColor = MaterialTheme.colorScheme.onSurface,
                             actionIconContentColor = MaterialTheme.colorScheme.onSurface
                         ),
-                        modifier = Modifier.drawBehind {
-                            drawLine(
-                                color = outlineColor.copy(alpha = 0.20f),
-                                start = Offset(0f, size.height),
-                                end = Offset(size.width, size.height),
-                                strokeWidth = 1.dp.toPx()
-                            )
-                        },
                         actions = {
                             val allVisibleSelected = filteredApps.isNotEmpty() && filteredApps.all { it.packageName in selectedPackages }
                             IconButton(onClick = {
@@ -361,18 +353,10 @@ fun AppListScreen(
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                            containerColor = MaterialTheme.colorScheme.surface,
                             titleContentColor = MaterialTheme.colorScheme.onSurface,
                             actionIconContentColor = MaterialTheme.colorScheme.onSurface
                         ),
-                        modifier = Modifier.drawBehind {
-                            drawLine(
-                                color = outlineColor.copy(alpha = 0.15f),
-                                start = Offset(0f, size.height),
-                                end = Offset(size.width, size.height),
-                                strokeWidth = 1.dp.toPx()
-                            )
-                        },
                         actions = {
                             // Sort Dropdown Button
                             Box {
@@ -535,13 +519,13 @@ fun AppListScreen(
                     )
                 }
 
-                // Frosted Search Box
+                // DataBackup-style Clean Search Bar
                 item(key = "search_box") {
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
-                        placeholder = { Text("Search apps or package name…") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        placeholder = { Text("Search for name or package…") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {
                                 IconButton(onClick = { searchQuery = "" }) {
@@ -550,12 +534,12 @@ fun AppListScreen(
                             }
                         },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.70f),
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.50f),
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
                             focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+                            unfocusedBorderColor = Color.Transparent
                         ),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(24.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -657,7 +641,7 @@ fun AppListScreen(
             }
         }
 
-        // Floating Frosted Bottom Capsule Bar
+        // DataBackup-style Floating Pill Continue Action
         FloatingBackupBar(
             selectedCount = selectedPackages.size,
             onClearSelection = { selectedPackages.clear() },
@@ -666,8 +650,8 @@ fun AppListScreen(
                 targetBackupApps = selected
             },
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 12.dp)
+                .align(Alignment.BottomEnd)
+                .padding(bottom = 16.dp)
         )
     }
 

@@ -3,7 +3,6 @@ package io.github.project.vault.ui.components
 import android.os.Environment
 import android.os.StatFs
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,15 +20,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.SdCard
-import androidx.compose.material.icons.filled.SdStorage
 import androidx.compose.material.icons.filled.Usb
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,9 +35,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.project.vault.data.model.StorageTarget
 import io.github.project.vault.data.model.StorageType
 import java.io.File
@@ -81,172 +81,155 @@ fun StorageHeroCard(
 
                 val total = totalBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
                 val free = availableBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
-                val fraction = if (totalBytes > 0) (usedBytes.toDouble() / totalBytes.toDouble()).coerceIn(0.0, 1.0).toFloat() else 0.5f
-
+                val fraction = (usedBytes.toDouble() / totalBytes.toDouble()).coerceIn(0.0, 1.0).toFloat()
                 Triple(total, free, fraction)
             }
         } catch (_: Exception) {
-            Triple(64.0, 20.0, 0.70f)
+            Triple(128.0, 64.0, 0.50f)
         }
     }
 
+    val usedGb = (totalGb - freeGb).coerceAtLeast(0.0)
+    val usedPercentage = (usedFraction * 100).toInt()
+
     val (storageTitle, storageIcon) = remember(activeTarget, storageDirectory) {
-        when (activeTarget?.type) {
-            StorageType.USB_DRIVE -> Pair(activeTarget.name.ifBlank { "USB Drive Storage" }, Icons.Default.Usb)
-            StorageType.SD_CARD -> Pair(activeTarget.name.ifBlank { "MicroSD Card Storage" }, Icons.Default.SdCard)
-            StorageType.CUSTOM -> Pair("Custom Storage Directory", Icons.Default.Folder)
-            StorageType.INTERNAL -> Pair("Internal Device Storage", Icons.Default.PhoneAndroid)
-            null -> {
-                val internalPath = Environment.getExternalStorageDirectory().absolutePath
-                val path = storageDirectory?.absolutePath ?: ""
-                when {
-                    path.isBlank() || path.startsWith(internalPath) || path.startsWith("/storage/emulated/0") ->
-                        Pair("Internal Device Storage", Icons.Default.PhoneAndroid)
-                    path.contains("usb", ignoreCase = true) || path.contains("otg", ignoreCase = true) ->
-                        Pair("USB Drive Storage", Icons.Default.Usb)
-                    path.matches(Regex(".*/storage/[A-Za-z0-9]{4}-[A-Za-z0-9]{4}.*")) ->
-                        Pair("MicroSD Card Storage", Icons.Default.SdCard)
-                    else -> Pair("Device Storage & Keystore", Icons.Default.SdStorage)
-                }
+        if (activeTarget != null) {
+            when (activeTarget.type) {
+                StorageType.USB_DRIVE -> Pair(activeTarget.name.ifBlank { "USB Drive" }, Icons.Default.Usb)
+                StorageType.SD_CARD -> Pair(activeTarget.name.ifBlank { "MicroSD Card" }, Icons.Default.SdCard)
+                StorageType.CUSTOM -> Pair("Custom Storage", Icons.Default.Folder)
+                StorageType.INTERNAL -> Pair("Internal storage", Icons.Default.PhoneAndroid)
+            }
+        } else {
+            val path = storageDirectory?.absolutePath ?: ""
+            if (path.contains("emulated/0") || path.contains("/sdcard")) {
+                Pair("Internal storage", Icons.Default.PhoneAndroid)
+            } else {
+                Pair("Backup Storage", Icons.Default.Folder)
             }
         }
     }
 
-    val animatedFraction by animateFloatAsState(
-        targetValue = usedFraction,
-        label = "StorageGaugeFraction"
-    )
-
-    val outlineColor = MaterialTheme.colorScheme.outline
-    val frostedBorder = BorderStroke(1.dp, outlineColor.copy(alpha = 0.20f))
-
-    Card(
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-            contentColor = MaterialTheme.colorScheme.onSurface
-        ),
-        border = frostedBorder,
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        modifier = modifier.fillMaxWidth()
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            // Header Row: Icon + Title + Status Chip
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)),
-                    contentAlignment = Alignment.Center
+        // Section Header (DataBackup style)
+        Text(
+            text = "Overview",
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp
+            ),
+            color = MaterialTheme.colorScheme.onBackground
+        )
+
+        // Card 1: Last backup / Status (DataBackup style pastel container)
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Inventory2,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "Backup status",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "$backupCount apps backed up",
+                    style = MaterialTheme.typography.headlineSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 24.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "$userAppCount user applications installed",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        // Card 2: Storage overview (DataBackup style with progress bar & byte stats)
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.40f),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(
                         imageVector = storageIcon,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(22.dp)
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "Storage",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = storageTitle,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = String.format(Locale.US, "%.1f GB Free of %.1f GB Total", freeGb, totalGb),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                StatusBadge(
-                    text = "${(usedFraction * 100).toInt()}% Used",
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.40f),
-                    contentColor = MaterialTheme.colorScheme.primary
+                Text(
+                    text = storageTitle,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-            }
 
-            Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-            // Gauge Pill Track
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(10.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.50f))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .fillMaxWidth(animatedFraction)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(MaterialTheme.colorScheme.primary)
+                // Clean Material 3 Linear Progress
+                val animatedProgress by animateFloatAsState(
+                    targetValue = usedFraction,
+                    label = "storageProgress"
                 )
-            }
 
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Information Pills Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Keystore Pill
-                Row(
+                LinearProgressIndicator(
+                    progress = { animatedProgress },
                     modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.50f))
-                        .padding(horizontal = 8.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Key,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Hardware Keystore Ready",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp)),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                    strokeCap = StrokeCap.Round
+                )
 
-                // Apps & Backups Pill
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.50f))
-                        .padding(horizontal = 8.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.FolderOpen,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "$userAppCount Apps • $backupCount Backups",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "$usedPercentage% used (${String.format(Locale.US, "%.1f", usedGb)} GB / ${String.format(Locale.US, "%.1f", totalGb)} GB)",
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

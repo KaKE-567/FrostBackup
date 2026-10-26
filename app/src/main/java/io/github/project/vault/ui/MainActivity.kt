@@ -141,18 +141,9 @@ class MainActivity : ComponentActivity() {
                                 containerColor = Color.Transparent,
                                 contentColor = MaterialTheme.colorScheme.onBackground,
                                 bottomBar = {
-                                    val outlineColor = MaterialTheme.colorScheme.outline
                                     NavigationBar(
-                                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                                        tonalElevation = 0.dp,
-                                        modifier = Modifier.drawBehind {
-                                            drawLine(
-                                                color = outlineColor.copy(alpha = 0.18f),
-                                                start = Offset(0f, 0f),
-                                                end = Offset(size.width, 0f),
-                                                strokeWidth = 1.dp.toPx()
-                                            )
-                                        }
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                        tonalElevation = 2.dp
                                     ) {
                                         screens.forEachIndexed { index, screen ->
                                             val selected = (if (pagerState.isScrollInProgress) pagerState.targetPage else pagerState.currentPage) == index

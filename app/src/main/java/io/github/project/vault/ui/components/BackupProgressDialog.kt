@@ -31,13 +31,11 @@ fun BackupProgressDialog(
     BasicAlertDialog(
         onDismissRequest = onDismissRequest
     ) {
-        Card(
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
-            ),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.20f)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            shadowElevation = 12.dp,
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(

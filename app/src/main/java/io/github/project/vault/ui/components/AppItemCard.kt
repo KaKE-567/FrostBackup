@@ -2,7 +2,6 @@ package io.github.project.vault.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
@@ -26,14 +26,13 @@ import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -44,9 +43,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.project.vault.data.model.AppInfo
 
 @Composable
@@ -63,120 +64,144 @@ fun AppItemCard(
         label = "ExpandChevronRotation"
     )
 
-    val outlineColor = MaterialTheme.colorScheme.outline
-    val frostedBorder = BorderStroke(
-        1.dp,
-        if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.50f)
-        else outlineColor.copy(alpha = 0.18f)
-    )
-
-    val containerColor = if (isSelected) {
-        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.12f)
+    // DataBackup-style: Clean surface with selection tinting and no harsh 1px borders
+    val itemBgColor = if (isSelected) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
     } else {
-        MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
     }
 
-    Card(
+    Surface(
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = containerColor,
-            contentColor = MaterialTheme.colorScheme.onSurface
-        ),
-        border = frostedBorder,
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 2.dp else 1.dp),
+        color = itemBgColor,
         modifier = modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
             .clickable { onSelectionChanged(!isSelected) }
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            // Main Top Row
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Checkbox(
-                    checked = isSelected,
-                    onCheckedChange = { onSelectionChanged(it) },
-                    colors = CheckboxDefaults.colors(
-                        checkedColor = MaterialTheme.colorScheme.primary,
-                        uncheckedColor = MaterialTheme.colorScheme.outline
-                    )
-                )
-
-                Spacer(modifier = Modifier.width(6.dp))
-
-                // High-Res Native App Icon
+                // High-Res Native App Icon (DataBackup squircle style)
                 AppIcon(
                     packageName = app.packageName,
                     size = 46.dp
                 )
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(14.dp))
 
-                // Title, Package, Badges
+                // App Title & Package Name
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = app.appName,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        ),
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
 
+                    Spacer(modifier = Modifier.height(2.dp))
+
                     Text(
                         text = app.packageName,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    Spacer(modifier = Modifier.height(3.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
 
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
                             text = if (app.appSizeFormatted.isNotEmpty()) "v${app.versionName} • ${app.appSizeFormatted}" else "v${app.versionName}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
+                            overflow = TextOverflow.Ellipsis
                         )
 
-                        if (app.hasBackup) {
-                            StatusBadge(
-                                text = "Backed Up",
-                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
-                                contentColor = MaterialTheme.colorScheme.primary
-                            )
-                        }
-
                         if (app.isSystemApp) {
-                            StatusBadge(
-                                text = "System",
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
-                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+                            ) {
+                                Text(
+                                    text = "System",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                )
+                            }
                         }
                     }
                 }
 
-                // Expand / Collapse Accordion Icon Button
-                IconButton(onClick = { expanded = !expanded }) {
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // DataBackup-style green check circle for already backed up apps
+                if (app.hasBackup) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .background(Color(0xFF2E7D32), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Backed Up",
+                            tint = Color.White,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                }
+
+                // DataBackup-style subtle vertical divider before action/checkbox
+                Box(
+                    modifier = Modifier
+                        .height(30.dp)
+                        .width(1.dp)
+                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+                )
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                // Checkbox
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onSelectionChanged(it) },
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = MaterialTheme.colorScheme.primary,
+                        uncheckedColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
+                    )
+                )
+
+                // Expand detail chevron
+                IconButton(
+                    onClick = { expanded = !expanded },
+                    modifier = Modifier.size(28.dp)
+                ) {
                     Icon(
                         imageVector = Icons.Default.ExpandMore,
                         contentDescription = if (expanded) "Collapse" else "Expand",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.rotate(rotationAngle)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier
+                            .size(20.dp)
+                            .rotate(rotationAngle)
                     )
                 }
             }
 
-            // Expandable Detail Accordion
+            // Expandable details (UID, Keystore status, quick single backup)
             AnimatedVisibility(visible = expanded) {
                 Column(
                     modifier = Modifier
@@ -184,12 +209,11 @@ fun AppItemCard(
                         .padding(top = 10.dp)
                 ) {
                     HorizontalDivider(
-                        color = outlineColor.copy(alpha = 0.12f),
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f),
                         thickness = 1.dp,
                         modifier = Modifier.padding(bottom = 10.dp)
                     )
 
-                    // Component Breakdown Chips
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -202,7 +226,6 @@ fun AppItemCard(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Package details & Single Backup button
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -221,9 +244,9 @@ fun AppItemCard(
                                 contentColor = MaterialTheme.colorScheme.onPrimary
                             ),
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.height(36.dp)
+                            modifier = Modifier.height(34.dp)
                         ) {
-                            Icon(Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Backup Now", style = MaterialTheme.typography.labelMedium)
                         }
@@ -239,24 +262,27 @@ private fun ComponentPill(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String
 ) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.50f))
-            .padding(horizontal = 6.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        modifier = Modifier.padding(vertical = 2.dp)
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(12.dp)
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(12.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
