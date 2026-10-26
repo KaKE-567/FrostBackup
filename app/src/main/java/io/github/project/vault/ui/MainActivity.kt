@@ -27,6 +27,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,10 +43,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import io.github.project.vault.core.cloud.OAuthManager
+import io.github.project.vault.core.updater.UpdateChecker
+import io.github.project.vault.core.updater.UpdateInfo
 import io.github.project.vault.data.repository.AppRepository
 import io.github.project.vault.data.repository.BackupRepository
 import io.github.project.vault.data.repository.TelephonyRepository
 import io.github.project.vault.ui.components.FrostedBackground
+import io.github.project.vault.ui.components.UpdateDialog
 import io.github.project.vault.ui.navigation.Screen
 import io.github.project.vault.ui.screens.AppListScreen
 import io.github.project.vault.ui.screens.CloudScreen
@@ -73,9 +77,23 @@ class MainActivity : ComponentActivity() {
             var currentKeyColor by remember {
                 mutableStateOf(ThemePreference.getKeyColor(applicationContext))
             }
+            var availableUpdate by remember { mutableStateOf<UpdateInfo?>(null) }
+
+            LaunchedEffect(Unit) {
+                val info = UpdateChecker.checkForUpdate(applicationContext)
+                if (info != null && info.hasUpdate) {
+                    availableUpdate = info
+                }
+            }
 
             AppVaultTheme(themeMode = currentThemeMode, keyColor = currentKeyColor) {
                 FrostedBackground {
+                    if (availableUpdate != null) {
+                        UpdateDialog(
+                            updateInfo = availableUpdate!!,
+                            onDismiss = { availableUpdate = null }
+                        )
+                    }
                     var isRootGranted by remember { mutableStateOf<Boolean?>(null) }
 
                     AnimatedContent(

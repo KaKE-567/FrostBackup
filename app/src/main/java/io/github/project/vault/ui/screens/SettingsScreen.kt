@@ -462,12 +462,54 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.height(8.dp))
 
                             Text(
-                                text = "Version 1.0.0 (FOSS Release)\n" +
+                                text = "Version 1.0.1 (FOSS Release)\n" +
                                        "Preserves application login states using SSAID preservation and Keystore token migration.\n" +
                                        "Licensed under GNU General Public License v3.0 (GPL-3.0).",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            var checkingUpdate by remember { mutableStateOf(false) }
+                            var updateFound by remember { mutableStateOf<io.github.project.vault.core.updater.UpdateInfo?>(null) }
+
+                            if (updateFound != null) {
+                                io.github.project.vault.ui.components.UpdateDialog(
+                                    updateInfo = updateFound!!,
+                                    onDismiss = { updateFound = null }
+                                )
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    checkingUpdate = true
+                                    scope.launch {
+                                        val info = io.github.project.vault.core.updater.UpdateChecker.checkForUpdate(context)
+                                        checkingUpdate = false
+                                        if (info != null && info.hasUpdate) {
+                                            updateFound = info
+                                        } else {
+                                            android.widget.Toast.makeText(context, "You are on the latest version!", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                enabled = !checkingUpdate,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                if (checkingUpdate) {
+                                    Text("Checking GitHub for updates...")
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Check for Updates")
+                                }
+                            }
                         }
                     }
                 }
