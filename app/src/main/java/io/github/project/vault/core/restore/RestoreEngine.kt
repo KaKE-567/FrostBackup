@@ -57,6 +57,8 @@ class RestoreEngine(private val context: Context) {
             if (!unpackResult.isSuccess) {
                 return@withContext RestoreResult.Error("Failed to extract backup package: ${unpackResult.stderr}")
             }
+            // Ensure system / installd / package manager has full read permissions into the staging APKs
+            RootShell.execute("chmod -R 777 $stagingPath")
 
             // 3. Read and parse metadata
             val metaFileResult = RootShell.execute("cat $stagingPath/metadata.json")
@@ -74,12 +76,16 @@ class RestoreEngine(private val context: Context) {
                 if (apkFilesResult.isSuccess && apkFilesResult.stdout.isNotBlank()) {
                     val apks = apkFilesResult.stdout.lines().map { it.trim() }.filter { it.endsWith(".apk") }
                     if (apks.size == 1) {
-                        val apkInstallResult = RootShell.execute("pm install -r -d -g ${apks.first()}")
-                        if (!apkInstallResult.isSuccess) {
-                            return@withContext RestoreResult.Error("APK installation failed: ${apkInstallResult.stderr}")
+                        val installCmd = "pm install -r -d -g --bypass-low-target-sdk-block ${apks.first()} 2>&1 || pm install -r -d -g ${apks.first()} 2>&1"
+                        val apkInstallResult = RootShell.execute(installCmd)
+                        val isFailed = !apkInstallResult.isSuccess || apkInstallResult.stdout.contains("Failure [")
+                        if (isFailed) {
+                            val failureReason = apkInstallResult.stdout.lines().firstOrNull { it.contains("Failure [") || it.startsWith("Error:") }
+                                ?: apkInstallResult.output
+                            return@withContext RestoreResult.Error("APK installation failed: $failureReason")
                         }
                     } else if (apks.size > 1) {
-                        val sessionRes = RootShell.execute("pm install-create -r -d -g")
+                        val sessionRes = RootShell.execute("pm install-create -r -d -g --bypass-low-target-sdk-block 2>&1 || pm install-create -r -d -g 2>&1")
                         val sessionId = Regex("""\[(\d+)\]""").find(sessionRes.stdout)?.groupValues?.get(1)
                             ?: Regex("""(\d+)""").find(sessionRes.stdout)?.groupValues?.get(1)
                         if (sessionId != null) {
@@ -88,9 +94,12 @@ class RestoreEngine(private val context: Context) {
                                 val size = RootShell.execute("stat -c %s $apkPath 2>/dev/null || wc -c < $apkPath").stdout.trim()
                                 RootShell.execute("pm install-write -S $size $sessionId $apkName $apkPath")
                             }
-                            val commitRes = RootShell.execute("pm install-commit $sessionId")
-                            if (!commitRes.isSuccess) {
-                                return@withContext RestoreResult.Error("Split APK install failed: ${commitRes.stderr}")
+                            val commitRes = RootShell.execute("pm install-commit $sessionId 2>&1")
+                            val commitFailed = !commitRes.isSuccess || commitRes.stdout.contains("Failure [")
+                            if (commitFailed) {
+                                val failureReason = commitRes.stdout.lines().firstOrNull { it.contains("Failure [") || it.startsWith("Error:") }
+                                    ?: commitRes.output
+                                return@withContext RestoreResult.Error("Split APK install failed: $failureReason")
                             }
                         } else {
                             val baseApk = apks.firstOrNull { it.endsWith("base.apk") } ?: apks.first()
@@ -100,12 +109,49 @@ class RestoreEngine(private val context: Context) {
                 }
             }
 
-            // 5. Look up newly assigned UID
+            // 5. Look up newly assigned UID with multi-tier fallback
             onProgress(RestoreProgress("Detecting security identifiers…", 0.55f, metadata.appName))
-            val uidResult = RootShell.execute("dumpsys package $pkg | grep 'userId=' | head -n1")
-            val uidMatch = Regex("""userId=(\d+)""").find(uidResult.stdout)
-            val newUid = uidMatch?.groupValues?.get(1)?.toIntOrNull()
-                ?: return@withContext RestoreResult.Error("Failed to obtain newly assigned user ID for $pkg")
+
+            var resolvedUid: Int? = null
+
+            // Tier 1: Fast standard pm list packages -U
+            val pmRes = RootShell.execute("pm list packages -U $pkg 2>/dev/null")
+            val pmMatch = Regex("""uid:(\d+)""").find(pmRes.stdout)
+            resolvedUid = pmMatch?.groupValues?.get(1)?.toIntOrNull()
+
+            // Tier 2: Direct lookup in /data/system/packages.list
+            if (resolvedUid == null) {
+                val pkgListRes = RootShell.execute("awk '\$1 == \"$pkg\" {print \$2}' /data/system/packages.list 2>/dev/null")
+                resolvedUid = pkgListRes.stdout.trim().toIntOrNull()
+            }
+
+            // Tier 3: stat ownership on /data/data/$pkg or /data/user/0/$pkg
+            if (resolvedUid == null) {
+                val statRes = RootShell.execute("stat -c %u /data/data/$pkg 2>/dev/null || stat -c %u /data/user/0/$pkg 2>/dev/null")
+                val statUid = statRes.stdout.trim().toIntOrNull()
+                if (statUid != null && statUid >= 10000) {
+                    resolvedUid = statUid
+                }
+            }
+
+            // Tier 4: dumpsys package (handles userId=, appId=, and uid=)
+            if (resolvedUid == null) {
+                val uidResult = RootShell.execute("dumpsys package $pkg 2>/dev/null | grep -E -m 1 '(userId=|appId=|uid=)'")
+                val uidMatch = Regex("""(?:userId|appId|uid)=(\d+)""").find(uidResult.stdout)
+                resolvedUid = uidMatch?.groupValues?.get(1)?.toIntOrNull()
+            }
+
+            if (resolvedUid == null) {
+                val pathCheck = RootShell.execute("pm path $pkg 2>/dev/null")
+                if (pathCheck.stdout.isBlank()) {
+                    return@withContext RestoreResult.Error(
+                        "Package $pkg is not installed. If this was a Data-Only backup, please install $pkg from Play Store/Aurora first, then restore."
+                    )
+                }
+                return@withContext RestoreResult.Error("Failed to obtain newly assigned user ID for $pkg")
+            }
+
+            val newUid = resolvedUid
 
             // 6. Stop app before restoring data
             RootShell.execute("am force-stop $pkg")
