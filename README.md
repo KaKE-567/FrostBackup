@@ -74,16 +74,6 @@ Most Android backup utilities—from legacy tools like Titanium Backup to modern
 * 💾 **Flexible Storage Destinations:** Back up to and restore from Internal Storage, MicroSD cards, or external USB OTG flash drives with live capacity meters and dynamic volume resolution.
 * ⚡ **High-Speed Batch Processing:** Multi-select applications with granular toggles (Split APKs, internal databases, external storage, SSAID, Keystore) and real-time progress tracking.
 
----
-
-## 📱 Screenshots
-
-<div align="center">
-  <img src="./media/screenshots/01_app_list.png" width="22%" alt="App List Screen" />
-  <img src="./media/screenshots/02_storage_selector.png" width="22%" alt="Storage Selector" />
-  <img src="./media/screenshots/03_cloud_sync.png" width="22%" alt="Cloud Sync Screen" />
-  <img src="./media/screenshots/04_sort_filter.png" width="22%" alt="Sort & Filter Menu" />
-</div>
 
 ---
 
