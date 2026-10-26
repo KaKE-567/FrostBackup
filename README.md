@@ -30,23 +30,32 @@ Most Android backup utilities—from legacy tools like Titanium Backup to modern
 
 ## ⚡ The Breakthrough: Why Restored Apps Stay Logged In
 
-```mermaid
-flowchart LR
-    subgraph Capture [Backup Stage]
-        A["App Data (/data/data)"] --> E["Encrypted Frost Archive"]
-        B["SSAID (settings_ssaid.xml)"] --> E
-        C["Keystore Keys (/data/misc/keystore)"] --> E
-        D["APK & Split Configs"] --> E
-    end
-
-    subgraph Restore [Restore & Migration Stage]
-        E --> F["Extract Package & Data"]
-        F --> G["Inject SSAID before launch"]
-        F --> H["Remap Keystore to New UID"]
-        F --> I["SELinux restorecon & chown UID"]
-    end
-    
-    I --> J["🚀 App Launches Fully Logged In"]
+```text
+┌─────────────────────────────────────────────────────────┐
+│                      BACKUP STAGE                       │
+│  • App Data (/data/data)                                │
+│  • SSAID Signatures (settings_ssaid.xml)                │
+│  • Keystore Crypto Keys (/data/misc/keystore)           │
+│  • Base APK & Split Architectures                       │
+└────────────────────────────┬────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────┐
+│            ENCRYPTED FROST ARCHIVE (.frost)             │
+│            (AES-256-GCM + PBKDF2 Encryption)            │
+└────────────────────────────┬────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────┐
+│               RESTORE & MIGRATION STAGE                 │
+│  1. Extract APKs & App Data Structure                   │
+│  2. Inject SSAID Device ID before App Launch            │
+│  3. Remap Keystore Keys to Newly Assigned Linux UID     │
+│  4. Repair Permissions: chown -R & restorecon -R        │
+└────────────────────────────┬────────────────────────────┘
+                             │
+                             ▼
+              🚀 APP LAUNCHES FULLY LOGGED IN
 ```
 
 1. **SSAID Preservation:** Captures and re-injects the app's unique Android ID from `/data/system/users/0/settings_ssaid.xml` before the application is started for the first time. The server believes it is communicating with the exact same physical hardware.
