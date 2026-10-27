@@ -462,8 +462,16 @@ fun SettingsScreen(
 
                             Spacer(modifier = Modifier.height(8.dp))
 
+                            val appVersionName = remember {
+                                try {
+                                    context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.4"
+                                } catch (_: Exception) {
+                                    "1.0.4"
+                                }
+                            }
+
                             Text(
-                                text = "Version 1.0.2 (FOSS Release)\n" +
+                                text = "Version $appVersionName (FOSS Release)\n" +
                                        "Preserves application login states using SSAID preservation and Keystore token migration.\n" +
                                        "Licensed under GNU General Public License v3.0 (GPL-3.0).",
                                 style = MaterialTheme.typography.bodySmall,
