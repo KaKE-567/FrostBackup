@@ -6,10 +6,12 @@ import android.os.Build
 import android.provider.CallLog
 import android.provider.Telephony
 import io.github.project.vault.core.root.RootShell
+import io.github.project.vault.core.wifi.WifiEngine
 import io.github.project.vault.data.model.CallLogEntry
 import io.github.project.vault.data.model.SmsMessage
 import io.github.project.vault.data.model.TelephonyArchiveMetadata
 import io.github.project.vault.data.model.TelephonyProgress
+import io.github.project.vault.data.model.WifiNetwork
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
@@ -246,6 +248,7 @@ object TelephonyEngine {
         destinationDir: File,
         includeSms: Boolean = true,
         includeCalls: Boolean = true,
+        includeWifi: Boolean = true,
         onProgress: (TelephonyProgress) -> Unit = {}
     ): Result<TelephonyArchiveMetadata> = withContext(Dispatchers.IO) {
         runCatching {
@@ -253,13 +256,14 @@ object TelephonyEngine {
 
             val now = System.currentTimeMillis()
             val timeString = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date(now))
-            val archiveFileName = "calls_sms_${timeString}.vault"
+            val archiveFileName = "records_${timeString}.vault"
             val stagingDir = File(destinationDir, ".staging_${archiveFileName.removeSuffix(".vault")}")
 
             RootShell.execute("rm -rf \"${stagingDir.absolutePath}\" && mkdir -p \"${stagingDir.absolutePath}/databases\"")
 
             var totalSmsCount = 0
             var totalCallCount = 0
+            var totalWifiCount = 0
 
             // 1. Export SMS
             if (includeSms) {
@@ -293,12 +297,26 @@ object TelephonyEngine {
                 )
             }
 
-            // 3. Metadata
-            onProgress(TelephonyProgress.BackingUp(3, 4, "Packing archive…"))
+            // 3. Export Wi-Fi
+            if (includeWifi) {
+                onProgress(TelephonyProgress.BackingUp(3, 4, "Exporting Wi-Fi passwords & networks…"))
+                val networks = try {
+                    WifiEngine.readSavedNetworks()
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                totalWifiCount = networks.size
+                val wifiFile = File(stagingDir, "wifi_networks.json")
+                wifiFile.writeText(json.encodeToString(networks))
+            }
+
+            // 4. Metadata
+            onProgress(TelephonyProgress.BackingUp(4, 4, "Packing archive…"))
             val meta = TelephonyArchiveMetadata(
                 backupTimestamp = now,
                 smsCount = totalSmsCount,
                 callCount = totalCallCount,
+                wifiCount = totalWifiCount,
                 archiveFileName = archiveFileName,
                 deviceModel = Build.MODEL ?: "",
                 isEncrypted = false
@@ -306,13 +324,13 @@ object TelephonyEngine {
             val metaFile = File(stagingDir, "metadata.json")
             metaFile.writeText(json.encodeToString(meta))
 
-            // 4. Create Tar Bundle
+            // 5. Create Tar Bundle
             if (!destinationDir.exists()) destinationDir.mkdirs()
             val finalArchivePath = File(destinationDir, archiveFileName).absolutePath
             val tarCmd = "tar -cpf \"$finalArchivePath\" -C \"${stagingDir.absolutePath}\" ."
             val tarResult = RootShell.execute(tarCmd)
             if (!tarResult.isSuccess) {
-                throw Exception("Failed to package telephony archive: ${tarResult.stderr}")
+                throw Exception("Failed to package archive: ${tarResult.stderr}")
             }
 
             // Measure archive size
@@ -323,7 +341,12 @@ object TelephonyEngine {
             RootShell.execute("rm -rf \"${stagingDir.absolutePath}\"")
 
             val completedMeta = meta.copy(archiveSizeBytes = sizeBytes)
-            onProgress(TelephonyProgress.Completed("Backup created successfully: $totalSmsCount SMS, $totalCallCount Calls"))
+            val summaryText = buildList {
+                if (totalSmsCount > 0) add("$totalSmsCount SMS")
+                if (totalCallCount > 0) add("$totalCallCount Calls")
+                if (totalWifiCount > 0) add("$totalWifiCount Wi-Fi")
+            }.joinToString(", ").ifBlank { "Records" }
+            onProgress(TelephonyProgress.Completed("Backup created successfully: $summaryText"))
             completedMeta
         }
     }
@@ -347,6 +370,7 @@ object TelephonyEngine {
 
             var restoredSmsCount = 0
             var restoredCallCount = 0
+            var restoredWifiCount = 0
 
             // 1. Restore Calls
             val callsFile = File(stagingDir, "calls.json")
@@ -475,10 +499,101 @@ object TelephonyEngine {
                 }
             }
 
-            onProgress(TelephonyProgress.Restoring(4, 4, "Finalizing restore…"))
+            // 3. Restore Wi-Fi
+            val wifiFile = File(stagingDir, "wifi_networks.json")
+            if (wifiFile.exists()) {
+                onProgress(TelephonyProgress.Restoring(4, 5, "Restoring Wi-Fi configurations…"))
+                try {
+                    val incomingNetworks = json.decodeFromString<List<WifiNetwork>>(wifiFile.readText())
+                    if (incomingNetworks.isNotEmpty()) {
+                        val targetConfigPath = WifiEngine.getActiveWifiConfigPath()
+                            ?: "/data/misc/apexdata/com.android.wifi/WifiConfigStore.xml"
+
+                        val targetDir = File(targetConfigPath).parentFile ?: File("/data/misc/wifi")
+                        RootShell.execute("mkdir -p ${targetDir.absolutePath}")
+
+                        val existingXmlResult = RootShell.execute("cat $targetConfigPath 2>/dev/null")
+                        val existingXml = if (existingXmlResult.isSuccess && existingXmlResult.stdout.contains("<WifiConfigStoreData>")) {
+                            existingXmlResult.stdout
+                        } else {
+                            """<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<WifiConfigStoreData>
+<int name="Version" value="3" />
+<NetworkList>
+</NetworkList>
+</WifiConfigStoreData>"""
+                        }
+
+                        var mergedXml = existingXml
+                        for (net in incomingNetworks) {
+                            val cleanSsid = net.cleanSsid
+                            val escapedSsid = cleanSsid.replace("&", "&amp;").replace("\"", "&quot;")
+
+                            if (mergedXml.contains("\"$cleanSsid\"") || mergedXml.contains("&quot;$cleanSsid&quot;")) {
+                                if (!net.cleanPassword.isNullOrBlank()) {
+                                    val pskEscaped = net.cleanPassword!!.replace("&", "&amp;").replace("\"", "&quot;")
+                                    mergedXml = mergedXml.replace(
+                                        Regex("""(<string name="SSID">&quot;$cleanSsid&quot;<\/string>[\s\S]*?<string name="PreSharedKey">)([^<]*)(<\/string>)"""),
+                                        "$1&quot;$pskEscaped&quot;$3"
+                                    )
+                                    restoredWifiCount++
+                                }
+                            } else {
+                                val blockToInject = if (!net.rawConfigXml.isNullOrBlank()) {
+                                    "<Network>\n${net.rawConfigXml}\n</Network>"
+                                } else {
+                                    val pskLine = if (!net.cleanPassword.isNullOrBlank()) {
+                                        val pskEscaped = net.cleanPassword!!.replace("&", "&amp;").replace("\"", "&quot;")
+                                        "<string name=\"PreSharedKey\">&quot;$pskEscaped&quot;</string>"
+                                    } else {
+                                        "<null name=\"PreSharedKey\" />"
+                                    }
+
+                                    """<Network>
+<WifiConfiguration>
+<string name="ConfigKey">&quot;$escapedSsid&quot;${net.keyMgmt}</string>
+<string name="SSID">&quot;$escapedSsid&quot;</string>
+<null name="BSSID" />
+$pskLine
+<null name="WEPKeys" />
+<int name="WEPTxKeyIndex" value="0" />
+<boolean name="HiddenSSID" value="${net.hiddenSSID}" />
+<boolean name="RequirePMF" value="false" />
+<boolean name="Shared" value="true" />
+<int name="Status" value="2" />
+<int name="CreatorUid" value="1000" />
+<string name="CreatorName">android.uid.system:1000</string>
+</WifiConfiguration>
+</Network>"""
+                                }
+
+                                if (mergedXml.contains("</NetworkList>")) {
+                                    mergedXml = mergedXml.replace("</NetworkList>", "$blockToInject\n</NetworkList>")
+                                    restoredWifiCount++
+                                }
+                            }
+                        }
+
+                        val tempWriteFile = File(stagingDir, "WifiConfigStore.xml")
+                        tempWriteFile.writeText(mergedXml)
+                        RootShell.execute("cp -f ${tempWriteFile.absolutePath} $targetConfigPath")
+                        RootShell.execute("chmod 600 $targetConfigPath")
+                        RootShell.execute("chown system:system $targetConfigPath 2>/dev/null || chown wifi:wifi $targetConfigPath 2>/dev/null")
+                        RootShell.execute("restorecon $targetConfigPath 2>/dev/null")
+                        RootShell.execute("svc wifi disable && sleep 1 && svc wifi enable")
+                    }
+                } catch (_: Exception) {}
+            }
+
+            onProgress(TelephonyProgress.Restoring(5, 5, "Finalizing restore…"))
             RootShell.execute("rm -rf \"${stagingDir.absolutePath}\"")
 
-            val msg = "Restored $restoredSmsCount SMS and $restoredCallCount Call Logs"
+            val summaryList = buildList {
+                if (restoredSmsCount > 0) add("$restoredSmsCount SMS")
+                if (restoredCallCount > 0) add("$restoredCallCount Call Logs")
+                if (restoredWifiCount > 0) add("$restoredWifiCount Wi-Fi Networks")
+            }.joinToString(", ").ifBlank { "Records" }
+            val msg = "Restored: $summaryList"
             onProgress(TelephonyProgress.Completed(msg))
             msg
         }

@@ -10,7 +10,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     data object Apps : Screen("apps", "Apps", Icons.Default.Apps)
-    data object Telephony : Screen("telephony", "Calls & SMS", Icons.Default.Forum)
+    data object Telephony : Screen("telephony", "Records", Icons.Default.Forum)
     data object Restore : Screen("restore", "Restore", Icons.Default.Restore)
     data object Cloud : Screen("cloud", "Cloud", Icons.Default.CloudSync)
     data object Settings : Screen("settings", "Settings", Icons.Default.Settings)

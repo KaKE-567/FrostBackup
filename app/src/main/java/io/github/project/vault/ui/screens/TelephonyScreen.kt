@@ -27,6 +27,10 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Sms
+import androidx.compose.material.icons.filled.VpnKey
+import androidx.compose.material.icons.filled.Wifi
+import io.github.project.vault.data.model.WifiNetwork
+import io.github.project.vault.ui.components.WifiPasswordViewerDialog
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -89,10 +93,15 @@ fun TelephonyScreen(
     val backups by telephonyRepository.telephonyBackups.collectAsState()
     var smsCount by remember { mutableIntStateOf(0) }
     var callCount by remember { mutableIntStateOf(0) }
+    var wifiCount by remember { mutableIntStateOf(0) }
     var isLoadingStats by remember { mutableStateOf(true) }
 
     var includeSms by remember { mutableStateOf(true) }
     var includeCalls by remember { mutableStateOf(true) }
+    var includeWifi by remember { mutableStateOf(true) }
+
+    var savedNetworks by remember { mutableStateOf<List<WifiNetwork>>(emptyList()) }
+    var showWifiViewer by remember { mutableStateOf(false) }
 
     var activeProgress by remember { mutableStateOf<TelephonyProgress?>(null) }
     var targetRestoreArchive by remember { mutableStateOf<TelephonyArchiveMetadata?>(null) }
@@ -104,9 +113,11 @@ fun TelephonyScreen(
 
     suspend fun refreshData() {
         isLoadingStats = true
-        val (sms, calls) = telephonyRepository.getDeviceStats()
+        val (sms, calls, wifi) = telephonyRepository.getDeviceStats()
         smsCount = sms
         callCount = calls
+        wifiCount = wifi
+        savedNetworks = telephonyRepository.getSavedWifiNetworks()
         telephonyRepository.refreshBackups()
         isLoadingStats = false
     }
@@ -137,12 +148,12 @@ fun TelephonyScreen(
                 title = {
                     Column {
                         Text(
-                            text = "Calls & SMS",
+                            text = "Device Records",
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Preserve communication records via Root",
+                            text = "Calls, SMS & Saved Wi-Fi Passwords",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -226,10 +237,10 @@ fun TelephonyScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Stats Tiles Row
+                        // Stats Tiles Row (SMS, Calls, Wi-Fi)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             // SMS Tile
                             Card(
@@ -240,29 +251,29 @@ fun TelephonyScreen(
                                 border = frostedBorder,
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Column(modifier = Modifier.padding(14.dp)) {
+                                Column(modifier = Modifier.padding(12.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
                                             imageVector = Icons.Default.Sms,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(18.dp)
+                                            modifier = Modifier.size(16.dp)
                                         )
-                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
                                         Text(
-                                            text = "Messages",
-                                            style = MaterialTheme.typography.labelMedium,
+                                            text = "SMS",
+                                            style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
-                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Spacer(modifier = Modifier.height(4.dp))
                                     Text(
                                         text = if (isLoadingStats) "…" else "$smsCount",
-                                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = "SMS in storage",
+                                        text = "Messages",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                                     )
@@ -278,31 +289,72 @@ fun TelephonyScreen(
                                 border = frostedBorder,
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Column(modifier = Modifier.padding(14.dp)) {
+                                Column(modifier = Modifier.padding(12.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
                                             imageVector = Icons.Default.Call,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.secondary,
-                                            modifier = Modifier.size(18.dp)
+                                            modifier = Modifier.size(16.dp)
                                         )
-                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
                                         Text(
-                                            text = "Call History",
-                                            style = MaterialTheme.typography.labelMedium,
+                                            text = "Calls",
+                                            style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
-                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Spacer(modifier = Modifier.height(4.dp))
                                     Text(
                                         text = if (isLoadingStats) "…" else "$callCount",
-                                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = "Call records",
+                                        text = "Records",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                    )
+                                }
+                            }
+
+                            // Wi-Fi Tile
+                            Card(
+                                onClick = { showWifiViewer = true },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                                ),
+                                border = frostedBorder,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Wifi,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.tertiary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Wi-Fi",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = if (isLoadingStats) "…" else "$wifiCount",
+                                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Saved Passwords",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
@@ -325,7 +377,7 @@ fun TelephonyScreen(
                                 )
                                 Text(
                                     text = "SMS ($smsCount)",
-                                    style = MaterialTheme.typography.bodyMedium
+                                    style = MaterialTheme.typography.bodySmall
                                 )
                             }
                             Row(
@@ -338,35 +390,76 @@ fun TelephonyScreen(
                                 )
                                 Text(
                                     text = "Calls ($callCount)",
-                                    style = MaterialTheme.typography.bodyMedium
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Checkbox(
+                                    checked = includeWifi,
+                                    onCheckedChange = { includeWifi = it }
+                                )
+                                Text(
+                                    text = "Wi-Fi ($wifiCount)",
+                                    style = MaterialTheme.typography.bodySmall
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                        // Backup Action Button
-                        Button(
-                            onClick = {
-                                scope.launch {
-                                    telephonyRepository.backup(
-                                        includeSms = includeSms,
-                                        includeCalls = includeCalls,
-                                        onProgress = { activeProgress = it }
-                                    ).onSuccess {
-                                        snackbarHostState.showSnackbar("Backup created: ${it.smsCount} SMS, ${it.callCount} Calls")
-                                        refreshData()
-                                    }.onFailure { err ->
-                                        snackbarHostState.showSnackbar("Backup failed: ${err.message}")
-                                    }
-                                }
-                            },
-                            enabled = includeSms || includeCalls,
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp)
+                        // Action Buttons Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
+                            Button(
+                                onClick = {
+                                    scope.launch {
+                                        telephonyRepository.backup(
+                                            includeSms = includeSms,
+                                            includeCalls = includeCalls,
+                                            includeWifi = includeWifi,
+                                            onProgress = { activeProgress = it }
+                                        ).onSuccess {
+                                            snackbarHostState.showSnackbar("Backup created successfully")
+                                            refreshData()
+                                        }.onFailure { err ->
+                                            snackbarHostState.showSnackbar("Backup failed: ${err.message}")
+                                        }
+                                    }
+                                },
+                                enabled = includeSms || includeCalls || includeWifi,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier
+                                    .weight(1.4f)
+                                    .height(50.dp)
+                            ) {
+                                Icon(Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Backup Records",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold)
+                                )
+                            }
+
+                            OutlinedButton(
+                                onClick = { showWifiViewer = true },
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(50.dp)
+                            ) {
+                                Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Passwords",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold)
+                                )
+                            }
+                        }
                             Icon(Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
@@ -481,10 +574,15 @@ fun TelephonyScreen(
         AlertDialog(
             onDismissRequest = { targetRestoreArchive = null },
             icon = { Icon(Icons.Default.Restore, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-            title = { Text("Restore Calls & SMS") },
+            title = { Text("Restore Device Records") },
             text = {
+                val summaryText = buildList {
+                    if (archive.smsCount > 0) add("${archive.smsCount} SMS messages")
+                    if (archive.callCount > 0) add("${archive.callCount} Call Logs")
+                    if (archive.wifiCount > 0) add("${archive.wifiCount} Wi-Fi Networks")
+                }.joinToString(", ").ifBlank { "records" }
                 Text(
-                    "This will restore ${archive.smsCount} SMS messages and ${archive.callCount} Call Logs from archive '${archive.archiveFileName}'.\n\nExisting records on your device will NOT be duplicated (safe merge)."
+                    "This will restore $summaryText from archive '${archive.archiveFileName}'.\n\nExisting records and network configurations on your device will NOT be duplicated (safe merge)."
                 )
             },
             confirmButton = {
@@ -509,6 +607,18 @@ fun TelephonyScreen(
             dismissButton = {
                 TextButton(onClick = { targetRestoreArchive = null }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showWifiViewer) {
+        WifiPasswordViewerDialog(
+            networks = savedNetworks,
+            onDismiss = { showWifiViewer = false },
+            onCopied = { ssid ->
+                scope.launch {
+                    snackbarHostState.showSnackbar("Password copied for $ssid")
                 }
             }
         )
@@ -719,6 +829,13 @@ fun TelephonyArchiveCard(
                     containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
                     contentColor = MaterialTheme.colorScheme.secondary
                 )
+                if (archive.wifiCount > 0) {
+                    StatusBadge(
+                        text = "${archive.wifiCount} Wi-Fi",
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f),
+                        contentColor = MaterialTheme.colorScheme.tertiary
+                    )
+                }
                 if (archive.deviceModel.isNotBlank()) {
                     Text(
                         text = archive.deviceModel,

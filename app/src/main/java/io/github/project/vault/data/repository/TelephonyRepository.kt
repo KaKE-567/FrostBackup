@@ -4,8 +4,10 @@ import android.content.Context
 import io.github.project.vault.core.cloud.GoogleDriveManager
 import io.github.project.vault.core.root.RootShell
 import io.github.project.vault.core.telephony.TelephonyEngine
+import io.github.project.vault.core.wifi.WifiEngine
 import io.github.project.vault.data.model.TelephonyArchiveMetadata
 import io.github.project.vault.data.model.TelephonyProgress
+import io.github.project.vault.data.model.WifiNetwork
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,10 +42,43 @@ class TelephonyRepository(
         dir
     }
 
-    suspend fun getDeviceStats(): Pair<Int, Int> = withContext(Dispatchers.IO) {
+    suspend fun getDeviceStats(): Triple<Int, Int, Int> = withContext(Dispatchers.IO) {
         val smsCount = TelephonyEngine.getDeviceSmsCount(context)
         val callCount = TelephonyEngine.getDeviceCallCount(context)
-        Pair(smsCount, callCount)
+        val wifiCount = try {
+            WifiEngine.readSavedNetworks().size
+        } catch (_: Exception) { 0 }
+        Triple(smsCount, callCount, wifiCount)
+    }
+
+    suspend fun getSavedWifiNetworks(): List<WifiNetwork> = withContext(Dispatchers.IO) {
+        try {
+            WifiEngine.readSavedNetworks()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun backupWifi(
+        encrypt: Boolean = false,
+        password: String? = null
+    ): Result<File> = withContext(Dispatchers.IO) {
+        val res = WifiEngine.createBackup(
+            destinationDir = ensureTelephonyDirectoryExists(),
+            encrypt = encrypt,
+            password = password
+        )
+        if (res.isSuccess) {
+            refreshBackups()
+        }
+        res
+    }
+
+    suspend fun restoreWifi(
+        archiveFile: File,
+        password: String? = null
+    ): Result<Int> = withContext(Dispatchers.IO) {
+        WifiEngine.restoreBackup(archiveFile, password)
     }
 
     suspend fun refreshBackups(): List<TelephonyArchiveMetadata> = withContext(Dispatchers.IO) {
@@ -110,6 +145,7 @@ class TelephonyRepository(
     suspend fun backup(
         includeSms: Boolean = true,
         includeCalls: Boolean = true,
+        includeWifi: Boolean = true,
         onProgress: (TelephonyProgress) -> Unit = {}
     ): Result<TelephonyArchiveMetadata> = withContext(Dispatchers.IO) {
         val result = TelephonyEngine.backup(
@@ -117,6 +153,7 @@ class TelephonyRepository(
             destinationDir = ensureTelephonyDirectoryExists(),
             includeSms = includeSms,
             includeCalls = includeCalls,
+            includeWifi = includeWifi,
             onProgress = onProgress
         )
         if (result.isSuccess) {

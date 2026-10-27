@@ -38,6 +38,7 @@ data class TelephonyArchiveMetadata(
     val backupTimestamp: Long,
     val smsCount: Int,
     val callCount: Int,
+    val wifiCount: Int = 0,
     val archiveFileName: String,
     val archiveSizeBytes: Long = 0L,
     val deviceModel: String = "",

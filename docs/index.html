@@ -821,10 +821,10 @@ Checksum: SHA-256 integrity digest stored in manifest.json</div>
 
         <div class="feat-card">
           <div class="feat-card-top">
-            <span class="feat-icon">💬</span>
-            <h3>Calls & SMS Backup</h3>
+            <span class="feat-icon">📶</span>
+            <h3>Wi-Fi, Calls & SMS</h3>
           </div>
-          <p>Dual-engine extraction from SQLite telephony databases and ContentProviders, with deduplication on restore.</p>
+          <p>Preserves Wi-Fi networks and WPA2/WPA3 passwords with built-in viewer, alongside SQLite calls and SMS messages with deduplication.</p>
         </div>
 
         <div class="feat-card">
@@ -974,25 +974,33 @@ Checksum: SHA-256 integrity digest stored in manifest.json</div>
             </div>
           </div>
 
-          <!-- SMS Tab -->
+          <!-- SMS & WiFi Tab -->
           <div class="tab-pane" id="tab-sms">
-            <h3>Telephony: SMS & Call Logs</h3>
-            <p>Preserve your communication history without proprietary cloud locks.</p>
+            <h3>Device Records: Wi-Fi, SMS & Call Logs</h3>
+            <p>Preserve your communication history and wireless credentials across ROM migrations.</p>
 
             <div class="ordered-steps">
               <div class="step-row">
                 <div class="step-index">1</div>
                 <div class="step-detail">
-                  <h4>Direct Database Access</h4>
-                  <p>Directly reads <code>mmssms.db</code> and <code>calllog.db</code> with automatic fallback to system ContentProviders.</p>
+                  <h4>Saved Wi-Fi Passwords & Networks</h4>
+                  <p>Extracts SSID and WPA2/WPA3 credentials from <code>WifiConfigStore.xml</code>. Includes an in-app viewer to inspect and copy passwords.</p>
                 </div>
               </div>
 
               <div class="step-row">
                 <div class="step-index">2</div>
                 <div class="step-detail">
+                  <h4>Direct Telephony Database Access</h4>
+                  <p>Directly reads <code>mmssms.db</code> and <code>calllog.db</code> with automatic fallback to system ContentProviders.</p>
+                </div>
+              </div>
+
+              <div class="step-row">
+                <div class="step-index">3</div>
+                <div class="step-detail">
                   <h4>Deduplicated Merging</h4>
-                  <p>When restoring on an existing installation, messages with matching timestamps and addresses are skipped so no duplicates are created.</p>
+                  <p>When restoring on an existing installation, matching Wi-Fi networks, messages, and calls are skipped to prevent duplicates.</p>
                 </div>
               </div>
             </div>
