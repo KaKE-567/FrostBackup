@@ -69,6 +69,7 @@ import io.github.project.vault.core.backup.BackupSubStep
 import io.github.project.vault.core.restore.RestoreProgress
 import io.github.project.vault.core.restore.RestoreSubStep
 import io.github.project.vault.data.model.AppInfo
+import io.github.project.vault.data.model.BackupConfig
 
 enum class ItemCheckStatus {
     PENDING,
@@ -90,6 +91,7 @@ fun BackupExecutionFlow(
     queuedApps: List<AppInfo>,
     isProcessing: Boolean,
     progress: BackupProgress?,
+    config: BackupConfig? = null,
     onStartProcessing: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -128,14 +130,27 @@ fun BackupExecutionFlow(
         }
     }
 
-    val checklist = listOf(
-        ChecklistItem("Backup APK", "App installation binaries", statusFor(BackupSubStep.APK)),
-        ChecklistItem("Backup USER", "Internal app data & databases", statusFor(BackupSubStep.USER)),
-        ChecklistItem("Backup USER_DE", "Device-encrypted app data", statusFor(BackupSubStep.USER_DE)),
-        ChecklistItem("Backup DATA", "External storage & media", statusFor(BackupSubStep.DATA)),
-        ChecklistItem("Backup SSAID", "Android device login identifier", statusFor(BackupSubStep.SSAID)),
-        ChecklistItem("Backup Keystore", "Cryptographic authentication keys", statusFor(BackupSubStep.KEYSTORE))
-    )
+    val checklist = buildList {
+        if (config == null || config.includeApk) {
+            add(ChecklistItem("Backup APK", "App installation binaries", statusFor(BackupSubStep.APK)))
+        }
+        if (config == null || config.includeInternalData) {
+            add(ChecklistItem("Backup USER", "Internal app data & databases", statusFor(BackupSubStep.USER)))
+            add(ChecklistItem("Backup USER_DE", "Device-encrypted app data", statusFor(BackupSubStep.USER_DE)))
+        }
+        if (config == null || config.includeExternalData) {
+            add(ChecklistItem("Backup DATA", "External storage & media", statusFor(BackupSubStep.DATA)))
+        }
+        if (config == null || config.includeSSAID) {
+            add(ChecklistItem("Backup SSAID", "Android device login identifier", statusFor(BackupSubStep.SSAID)))
+        }
+        if (config == null || config.includeKeystore) {
+            add(ChecklistItem("Backup Keystore", "Cryptographic authentication keys", statusFor(BackupSubStep.KEYSTORE)))
+        }
+        if (config?.uploadToCloud == true) {
+            add(ChecklistItem("Upload to Google Drive", "Cloud backup synchronization", statusFor(BackupSubStep.UPLOAD)))
+        }
+    }
 
     val currentApp = progress?.currentApp ?: queuedApps.firstOrNull()?.appName ?: "Backup"
     val currentPackageName = progress?.currentPackageName ?: queuedApps.firstOrNull()?.packageName ?: ""

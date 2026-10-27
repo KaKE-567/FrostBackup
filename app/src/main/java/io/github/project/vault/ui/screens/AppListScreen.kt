@@ -179,15 +179,20 @@ fun AppListScreen(
     var availableTargets by remember { mutableStateOf<List<StorageTarget>>(emptyList()) }
     var currentStorageDirectory by remember { mutableStateOf(backupRepository.getBackupDirectory()) }
 
+    // Backup Configuration & Sheet State (Data selection, GDrive, Encryption, SSAID, etc.)
+    var targetBackupApps by remember { mutableStateOf<List<AppInfo>?>(null) }
+    var activeBackupConfig by remember { mutableStateOf<BackupConfig?>(null) }
+
     // DataBackup Execution Flow State (insp1.png & insp2.png)
     var executionQueuedApps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
     var isExecutionActive by remember { mutableStateOf(false) }
     var isProcessing by remember { mutableStateOf(false) }
     var activeProgress by remember { mutableStateOf<BackupProgress?>(null) }
 
-    fun launchExecution(appsToRun: List<AppInfo>) {
+    fun launchExecution(appsToRun: List<AppInfo>, config: BackupConfig) {
         if (appsToRun.isNotEmpty()) {
             executionQueuedApps = appsToRun
+            activeBackupConfig = config
             isExecutionActive = true
             isProcessing = false
             activeProgress = null
@@ -636,7 +641,7 @@ fun AppListScreen(
                                 }
                             },
                             onBackupClicked = {
-                                launchExecution(listOf(app))
+                                targetBackupApps = listOf(app)
                             }
                         )
                     }
@@ -656,7 +661,9 @@ fun AppListScreen(
             ExtendedFloatingActionButton(
                 onClick = {
                     val selected = apps.filter { it.packageName in selectedPackages }
-                    launchExecution(selected)
+                    if (selected.isNotEmpty()) {
+                        targetBackupApps = selected
+                    }
                 },
                 shape = RoundedCornerShape(20.dp),
                 containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -676,18 +683,32 @@ fun AppListScreen(
             }
         }
 
+        // Backup Options Selection Sheet (GDrive, data/data, encryption, SSAID, etc.)
+        targetBackupApps?.let { appsToTarget ->
+            BackupSheet(
+                targetApps = appsToTarget,
+                onDismissRequest = { targetBackupApps = null },
+                onConfirmBackup = { config ->
+                    val appsToRun = appsToTarget
+                    targetBackupApps = null
+                    launchExecution(appsToRun, config)
+                }
+            )
+        }
+
         // Fullscreen DataBackup-style Execution Flow (insp1.png & insp2.png)
         if (isExecutionActive && executionQueuedApps.isNotEmpty()) {
             BackupExecutionFlow(
                 queuedApps = executionQueuedApps,
                 isProcessing = isProcessing,
                 progress = activeProgress,
+                config = activeBackupConfig,
                 onStartProcessing = {
                     isProcessing = true
                     scope.launch {
                         val engine = BackupEngine(context)
                         val destination = backupRepository.getBackupDirectory()
-                        val config = BackupConfig(
+                        val config = activeBackupConfig ?: BackupConfig(
                             includeApk = true,
                             includeInternalData = true,
                             includeExternalData = false,
@@ -750,6 +771,7 @@ fun AppListScreen(
                     isProcessing = false
                     activeProgress = null
                     executionQueuedApps = emptyList()
+                    activeBackupConfig = null
                 }
             )
         }
