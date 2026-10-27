@@ -85,11 +85,11 @@ import io.github.project.vault.data.repository.AppRepository
 import io.github.project.vault.data.repository.BackupRepository
 import io.github.project.vault.ui.components.AppItemCard
 import io.github.project.vault.ui.components.BackupExecutionFlow
-import io.github.project.vault.ui.components.BackupProgressDialog
-import io.github.project.vault.ui.components.FloatingBackupBar
 import io.github.project.vault.ui.components.StatusBadge
 import io.github.project.vault.ui.components.StorageHeroCard
 import io.github.project.vault.ui.components.StorageSelectorSheet
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -172,9 +172,20 @@ fun AppListScreen(
     var availableTargets by remember { mutableStateOf<List<StorageTarget>>(emptyList()) }
     var currentStorageDirectory by remember { mutableStateOf(backupRepository.getBackupDirectory()) }
 
-    // Backup Sheet & Progress State
-    var targetBackupApps by remember { mutableStateOf<List<AppInfo>?>(null) }
+    // DataBackup Execution Flow State (insp1.png & insp2.png)
+    var executionQueuedApps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
+    var isExecutionActive by remember { mutableStateOf(false) }
+    var isProcessing by remember { mutableStateOf(false) }
     var activeProgress by remember { mutableStateOf<BackupProgress?>(null) }
+
+    fun launchExecution(appsToRun: List<AppInfo>) {
+        if (appsToRun.isNotEmpty()) {
+            executionQueuedApps = appsToRun
+            isExecutionActive = true
+            isProcessing = false
+            activeProgress = null
+        }
+    }
 
     suspend fun reloadApps(forceRefresh: Boolean = false) {
         if (rawApps.isEmpty()) {
@@ -277,23 +288,6 @@ fun AppListScreen(
                                     imageVector = if (allVisibleSelected) Icons.Default.RemoveDone else Icons.Default.DoneAll,
                                     contentDescription = if (allVisibleSelected) "Deselect All" else "Select All"
                                 )
-                            }
-                            Button(
-                                onClick = {
-                                    val selected = apps.filter { it.packageName in selectedPackages }
-                                    targetBackupApps = selected
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary
-                                ),
-                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                                modifier = Modifier.padding(end = 8.dp)
-                            ) {
-                                Icon(Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Backup", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
                             }
                         }
                     )
@@ -635,7 +629,7 @@ fun AppListScreen(
                                 }
                             },
                             onBackupClicked = {
-                                targetBackupApps = listOf(app)
+                                launchExecution(listOf(app))
                             }
                         )
                     }
@@ -643,46 +637,62 @@ fun AppListScreen(
             }
         }
 
-        // DataBackup-style Floating Pill Continue Action
-        FloatingBackupBar(
-            selectedCount = selectedPackages.size,
-            onClearSelection = { selectedPackages.clear() },
-            onBackupClicked = {
-                val selected = apps.filter { it.packageName in selectedPackages }
-                targetBackupApps = selected
-            },
+        // DataBackup-style Clean Floating "Continue" Pill (Matching databackup_02.jpg)
+        AnimatedVisibility(
+            visible = selectedPackages.isNotEmpty(),
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(bottom = 16.dp)
-        )
+                .padding(end = 20.dp, bottom = 20.dp)
+        ) {
+            ExtendedFloatingActionButton(
+                onClick = {
+                    val selected = apps.filter { it.packageName in selectedPackages }
+                    launchExecution(selected)
+                },
+                shape = RoundedCornerShape(20.dp),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Continue",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+            }
+        }
     }
 
-    // Modal Sheet for Backup Options
-    targetBackupApps?.let { appsToBackup ->
-        BackupSheet(
-            targetApps = appsToBackup,
-            onDismissRequest = { targetBackupApps = null },
-            onConfirmBackup = { config ->
-                targetBackupApps = null
+    // Fullscreen DataBackup-style Execution Flow (insp1.png & insp2.png)
+    if (isExecutionActive && executionQueuedApps.isNotEmpty()) {
+        BackupExecutionFlow(
+            queuedApps = executionQueuedApps,
+            isProcessing = isProcessing,
+            progress = activeProgress,
+            onStartProcessing = {
+                isProcessing = true
                 scope.launch {
                     val engine = BackupEngine(context)
                     val destination = backupRepository.getBackupDirectory()
-
-                    // Stage 1: Preprocessing Flow (Validating root, storage target, staging)
-                    activeProgress = BackupProgress(
-                        currentStep = "Necessary preparations",
-                        progressFraction = 0.05f,
-                        currentApp = "Preprocessing",
-                        currentPackageName = "",
-                        subStep = BackupSubStep.PREPARING,
-                        appIndex = 1,
-                        totalApps = appsToBackup.size,
-                        isPreprocessing = true
+                    val config = BackupConfig(
+                        includeApk = true,
+                        includeInternalData = true,
+                        includeExternalData = false,
+                        includeSSAID = true,
+                        includeKeystore = true,
+                        encrypt = false,
+                        encryptionPassword = null,
+                        uploadToCloud = false
                     )
-                    kotlinx.coroutines.delay(700)
 
-                    // Stage 2: Processing Flow (Iterate through apps)
-                    for ((index, app) in appsToBackup.withIndex()) {
+                    for ((index, app) in executionQueuedApps.withIndex()) {
                         val appNumber = index + 1
                         activeProgress = BackupProgress(
                             currentStep = "Initializing…",
@@ -691,36 +701,31 @@ fun AppListScreen(
                             currentPackageName = app.packageName,
                             subStep = BackupSubStep.PREPARING,
                             appIndex = appNumber,
-                            totalApps = appsToBackup.size,
+                            totalApps = executionQueuedApps.size,
                             isPreprocessing = false
                         )
                         val result = engine.performBackup(app, config, destination) { prog ->
                             activeProgress = prog.copy(
                                 appIndex = appNumber,
-                                totalApps = appsToBackup.size,
+                                totalApps = executionQueuedApps.size,
                                 isPreprocessing = false
                             )
                         }
 
-                        when (result) {
-                            is BackupResult.Success -> {
-                                // App succeeded
-                            }
-                            is BackupResult.Error -> {
-                                snackbarHostState.showSnackbar("Error on ${app.appName}: ${result.message}")
-                            }
+                        if (result is BackupResult.Error) {
+                            snackbarHostState.showSnackbar("Error on ${app.appName}: ${result.message}")
                         }
                     }
 
-                    // Stage 3: Finished / Done State
+                    // Done State
                     activeProgress = BackupProgress(
                         currentStep = "All operations completed successfully",
                         progressFraction = 1f,
                         currentApp = "Completed",
                         currentPackageName = "",
                         subStep = BackupSubStep.DONE,
-                        appIndex = appsToBackup.size,
-                        totalApps = appsToBackup.size,
+                        appIndex = executionQueuedApps.size,
+                        totalApps = executionQueuedApps.size,
                         isPreprocessing = false,
                         isFinished = true
                     )
@@ -733,16 +738,12 @@ fun AppListScreen(
                         reloadApps(forceRefresh = true)
                     }
                 }
-            }
-        )
-    }
-
-    // Fullscreen DataBackup-style Execution Flow
-    activeProgress?.let { prog ->
-        BackupExecutionFlow(
-            progress = prog,
+            },
             onDismiss = {
+                isExecutionActive = false
+                isProcessing = false
                 activeProgress = null
+                executionQueuedApps = emptyList()
             }
         )
     }

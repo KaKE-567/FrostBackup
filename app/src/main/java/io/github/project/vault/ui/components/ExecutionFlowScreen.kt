@@ -10,10 +10,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,10 +26,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -70,6 +66,7 @@ import io.github.project.vault.core.backup.BackupProgress
 import io.github.project.vault.core.backup.BackupSubStep
 import io.github.project.vault.core.restore.RestoreProgress
 import io.github.project.vault.core.restore.RestoreSubStep
+import io.github.project.vault.data.model.AppInfo
 
 enum class ItemCheckStatus {
     PENDING,
@@ -83,11 +80,26 @@ data class ChecklistItem(
     val status: ItemCheckStatus
 )
 
+/**
+ * DataBackup-style Execution Flow for Backup (insp1.png and insp2.png)
+ */
 @Composable
 fun BackupExecutionFlow(
-    progress: BackupProgress,
+    queuedApps: List<AppInfo>,
+    isProcessing: Boolean,
+    progress: BackupProgress?,
+    onStartProcessing: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val isFinished = progress?.isFinished == true
+    val isFailed = progress?.isFailed == true
+
+    BackHandler(enabled = true) {
+        if (!isProcessing || isFinished || isFailed) {
+            onDismiss()
+        }
+    }
+
     val stepOrder = listOf(
         BackupSubStep.PREPARING,
         BackupSubStep.APK,
@@ -103,7 +115,8 @@ fun BackupExecutionFlow(
     )
 
     fun statusFor(step: BackupSubStep): ItemCheckStatus {
-        if (progress.isFinished) return ItemCheckStatus.COMPLETED
+        if (isFinished) return ItemCheckStatus.COMPLETED
+        if (progress == null) return ItemCheckStatus.PENDING
         val itemIndex = stepOrder.indexOf(step)
         val currentIndex = stepOrder.indexOf(progress.subStep)
         return when {
@@ -122,28 +135,55 @@ fun BackupExecutionFlow(
         ChecklistItem("Backup Keystore", "Cryptographic authentication keys", statusFor(BackupSubStep.KEYSTORE))
     )
 
-    ExecutionFlowScaffold(
+    val currentApp = progress?.currentApp ?: queuedApps.firstOrNull()?.appName ?: "Backup"
+    val currentPackageName = progress?.currentPackageName ?: queuedApps.firstOrNull()?.packageName ?: ""
+    val currentStepText = progress?.subStep?.label ?: "Backup USER"
+    val progressFraction = progress?.progressFraction ?: 0f
+    val appIndex = progress?.appIndex ?: 1
+    val totalApps = progress?.totalApps ?: queuedApps.size.coerceAtLeast(1)
+
+    ExecutionFlowSurface(
         operationType = "Backup",
-        currentApp = progress.currentApp,
-        currentPackageName = progress.currentPackageName,
-        currentStepText = progress.subStep.label,
-        progressFraction = progress.progressFraction,
-        appIndex = progress.appIndex,
-        totalApps = progress.totalApps,
-        isPreprocessing = progress.isPreprocessing,
-        isFinished = progress.isFinished,
-        isFailed = progress.isFailed,
-        errorMessage = progress.errorMessage,
+        queuedApps = queuedApps,
+        isProcessing = isProcessing,
+        isFinished = isFinished,
+        isFailed = isFailed,
+        errorMessage = progress?.errorMessage,
+        currentApp = currentApp,
+        currentPackageName = currentPackageName,
+        currentStepText = currentStepText,
+        progressFraction = progressFraction,
+        appIndex = appIndex,
+        totalApps = totalApps,
         checklist = checklist,
+        onActionClick = {
+            if (!isProcessing) {
+                onStartProcessing()
+            } else if (isFinished || isFailed) {
+                onDismiss()
+            }
+        },
         onDismiss = onDismiss
     )
 }
 
+/**
+ * DataBackup-style Execution Flow for Restore
+ */
 @Composable
 fun RestoreExecutionFlow(
     progress: RestoreProgress,
     onDismiss: () -> Unit
 ) {
+    val isFinished = progress.isFinished
+    val isFailed = progress.isFailed
+
+    BackHandler(enabled = true) {
+        if (isFinished || isFailed) {
+            onDismiss()
+        }
+    }
+
     val stepOrder = listOf(
         RestoreSubStep.PREPARING,
         RestoreSubStep.DECRYPTING,
@@ -159,7 +199,7 @@ fun RestoreExecutionFlow(
     )
 
     fun statusFor(step: RestoreSubStep): ItemCheckStatus {
-        if (progress.isFinished) return ItemCheckStatus.COMPLETED
+        if (isFinished) return ItemCheckStatus.COMPLETED
         val itemIndex = stepOrder.indexOf(step)
         val currentIndex = stepOrder.indexOf(progress.subStep)
         return when {
@@ -179,51 +219,53 @@ fun RestoreExecutionFlow(
         ChecklistItem("Apply Permissions", "Enforcing UID and SELinux contexts", statusFor(RestoreSubStep.PERMISSIONS))
     )
 
-    ExecutionFlowScaffold(
+    ExecutionFlowSurface(
         operationType = "Restore",
+        queuedApps = emptyList(),
+        isProcessing = true,
+        isFinished = isFinished,
+        isFailed = isFailed,
+        errorMessage = progress.errorMessage,
         currentApp = progress.currentApp,
         currentPackageName = progress.currentPackageName,
         currentStepText = progress.subStep.label,
         progressFraction = progress.progressFraction,
         appIndex = progress.appIndex,
         totalApps = progress.totalApps,
-        isPreprocessing = progress.isPreprocessing,
-        isFinished = progress.isFinished,
-        isFailed = progress.isFailed,
-        errorMessage = progress.errorMessage,
         checklist = checklist,
+        onActionClick = {
+            if (isFinished || isFailed) {
+                onDismiss()
+            }
+        },
         onDismiss = onDismiss
     )
 }
 
 @Composable
-private fun ExecutionFlowScaffold(
+private fun ExecutionFlowSurface(
     operationType: String,
+    queuedApps: List<AppInfo>,
+    isProcessing: Boolean,
+    isFinished: Boolean,
+    isFailed: Boolean,
+    errorMessage: String?,
     currentApp: String,
     currentPackageName: String,
     currentStepText: String,
     progressFraction: Float,
     appIndex: Int,
     totalApps: Int,
-    isPreprocessing: Boolean,
-    isFinished: Boolean,
-    isFailed: Boolean,
-    errorMessage: String?,
     checklist: List<ChecklistItem>,
+    onActionClick: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    BackHandler(enabled = true) {
-        if (isFinished || isFailed) {
-            onDismiss()
-        }
-    }
-
     val infiniteTransition = rememberInfiniteTransition(label = "HeroTransition")
     val hourglassRotation by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2400, easing = LinearEasing),
+            animation = tween(2800, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "HourglassRotation"
@@ -245,21 +287,21 @@ private fun ExecutionFlowScaffold(
                 .statusBarsPadding()
                 .navigationBarsPadding()
         ) {
-            // Top Bar
+            // Top App Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
                     onClick = onDismiss,
-                    enabled = isFinished || isFailed
+                    enabled = !isProcessing || isFinished || isFailed
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = if (isFinished || isFailed) {
+                        tint = if (!isProcessing || isFinished || isFailed) {
                             MaterialTheme.colorScheme.onSurface
                         } else {
                             MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
@@ -267,13 +309,13 @@ private fun ExecutionFlowScaffold(
                     )
                 }
 
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
 
                 Text(
                     text = when {
                         isFailed -> "Failed"
                         isFinished -> "Completed"
-                        isPreprocessing -> operationType
+                        !isProcessing -> operationType
                         else -> "Processing"
                     },
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
@@ -281,46 +323,37 @@ private fun ExecutionFlowScaffold(
                 )
             }
 
-            // Two-Stage Progress Indicator Bar (Preprocessing | Processing)
+            // Two-Stage Segmented Progress Bar (Preprocessing | Processing)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                    .padding(horizontal = 20.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Segment 1: Preprocessing
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(6.dp)
+                        .height(5.dp)
                         .clip(RoundedCornerShape(3.dp))
                         .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                 ) {
-                    if (isPreprocessing) {
-                        LinearProgressIndicator(
-                            modifier = Modifier.fillMaxSize(),
-                            color = MaterialTheme.colorScheme.primary,
-                            trackColor = Color.Transparent,
-                            strokeCap = StrokeCap.Round
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.primary)
-                        )
-                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.primary)
+                    )
                 }
 
                 // Segment 2: Processing
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(6.dp)
+                        .height(5.dp)
                         .clip(RoundedCornerShape(3.dp))
                         .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                 ) {
-                    if (!isPreprocessing) {
+                    if (isProcessing) {
                         if (isFinished) {
                             Box(
                                 modifier = Modifier
@@ -346,20 +379,18 @@ private fun ExecutionFlowScaffold(
                 }
             }
 
-            // Scrollable Content: Hero Section + Elevated Detail Card
+            // Body Content
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
+                    .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Spacer(modifier = Modifier.height(28.dp))
 
                 // Hero Center Circle (116.dp)
                 Box(
-                    modifier = Modifier
-                        .size(116.dp),
+                    modifier = Modifier.size(116.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     when {
@@ -375,19 +406,20 @@ private fun ExecutionFlowScaffold(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(52.dp)
+                                    modifier = Modifier.size(54.dp)
                                 )
                             }
                         }
 
-                        isPreprocessing -> {
+                        !isProcessing -> {
+                            // Preprocessing Screen Hero Circle (insp1.png)
                             Box(
                                 modifier = Modifier
-                                    .size(104.dp)
+                                    .size(108.dp)
                                     .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f))
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
                                     .border(
-                                        BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                                        BorderStroke(3.dp, MaterialTheme.colorScheme.primary),
                                         CircleShape
                                     ),
                                 contentAlignment = Alignment.Center
@@ -397,14 +429,14 @@ private fun ExecutionFlowScaffold(
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier
-                                        .size(46.dp)
+                                        .size(48.dp)
                                         .rotate(hourglassRotation)
                                 )
                             }
                         }
 
                         else -> {
-                            // Processing state: Segmented circular track with app icon in center
+                            // Processing Screen Hero Circle (insp2.png)
                             CircularProgressIndicator(
                                 progress = { animatedAppFraction },
                                 modifier = Modifier.size(116.dp),
@@ -416,7 +448,7 @@ private fun ExecutionFlowScaffold(
 
                             Box(
                                 modifier = Modifier
-                                    .size(94.dp)
+                                    .size(96.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
                                 contentAlignment = Alignment.Center
@@ -424,7 +456,7 @@ private fun ExecutionFlowScaffold(
                                 if (currentPackageName.isNotBlank()) {
                                     AppIcon(
                                         packageName = currentPackageName,
-                                        size = 56.dp
+                                        size = 58.dp
                                     )
                                 } else {
                                     Icon(
@@ -446,7 +478,7 @@ private fun ExecutionFlowScaffold(
                     text = when {
                         isFailed -> "Error Occurred"
                         isFinished -> "Done"
-                        isPreprocessing -> "Preprocessing"
+                        !isProcessing -> "Preprocessing"
                         else -> currentApp.ifBlank { "Processing" }
                     },
                     style = MaterialTheme.typography.headlineMedium.copy(
@@ -466,13 +498,13 @@ private fun ExecutionFlowScaffold(
                     text = when {
                         isFailed -> errorMessage ?: "Operation failed"
                         isFinished -> "All operations completed successfully"
-                        isPreprocessing -> "Necessary preparations"
+                        !isProcessing -> "Necessary preparations"
                         else -> currentStepText.ifBlank { "Executing task…" }
                     },
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontWeight = FontWeight.Medium
                     ),
-                    color = if (isFinished || isPreprocessing) {
+                    color = if (isFinished || !isProcessing) {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     } else {
                         MaterialTheme.colorScheme.primary
@@ -491,33 +523,45 @@ private fun ExecutionFlowScaffold(
                     ),
                     border = BorderStroke(
                         1.dp,
-                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.30f)
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp)
-                    ) {
-                        if (isPreprocessing) {
-                            Text(
-                                text = "System Checklist",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(14.dp))
-                            PrecheckRow(title = "Root Access Verification", isDone = true)
-                            Spacer(modifier = Modifier.height(10.dp))
-                            PrecheckRow(title = "Storage Permissions & Path Validation", isDone = true)
-                            Spacer(modifier = Modifier.height(10.dp))
-                            PrecheckRow(title = "Staging Environment Allocation", isDone = true)
-                            Spacer(modifier = Modifier.height(10.dp))
-                            PrecheckRow(title = "Queue Indexed ($totalApps Applications)", isDone = false)
-                        } else {
-                            // Active App Header inside Card
+                    if (!isProcessing) {
+                        // Preprocessing App List (insp1.png style)
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(queuedApps, key = { it.packageName }) { app ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    AppIcon(packageName = app.packageName, size = 32.dp)
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = app.appName,
+                                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        // Processing App Details + Checklist (insp2.png style)
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp)
+                        ) {
+                            // Active App Header
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
@@ -578,86 +622,34 @@ private fun ExecutionFlowScaffold(
                         }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(24.dp))
             }
 
-            // Bottom Floating Pill Button (Continue / Finished)
+            // Bottom Full-Width Rounded Pill Button (insp1.png and insp2.png)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 16.dp)
+                    .padding(horizontal = 20.dp, vertical = 18.dp)
             ) {
                 Button(
-                    onClick = onDismiss,
-                    enabled = isFinished || isFailed,
+                    onClick = onActionClick,
+                    enabled = !isProcessing || isFinished || isFailed,
                     shape = RoundedCornerShape(28.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
-                        disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f)
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
+                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(54.dp)
                 ) {
-                    if (isFinished) {
-                        Text(
-                            text = "Continue",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    } else if (isFailed) {
-                        Text(
-                            text = "Dismiss",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                        )
-                    } else {
-                        Text(
-                            text = if (isPreprocessing) "Preparing…" else "Processing… ${(progressFraction * 100).toInt()}%",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-                    }
+                    Text(
+                        text = if (isFailed) "Dismiss" else "Continue",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun PrecheckRow(
-    title: String,
-    isDone: Boolean
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (isDone) {
-            Icon(
-                imageVector = Icons.Default.CheckCircle,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
-            )
-        } else {
-            CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
-                strokeWidth = 2.dp,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (isDone) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 
