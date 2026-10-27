@@ -148,13 +148,18 @@ fun BackupExecutionFlow(
             add(ChecklistItem("Backup Keystore", "Cryptographic authentication keys", statusFor(BackupSubStep.KEYSTORE)))
         }
         if (config?.uploadToCloud == true) {
-            add(ChecklistItem("Upload to Google Drive", "Cloud backup synchronization", statusFor(BackupSubStep.UPLOAD)))
+            add(ChecklistItem("Live GDrive Upload", "Live cloud synchronization & streaming", statusFor(BackupSubStep.UPLOAD)))
         }
     }
 
     val currentApp = progress?.currentApp ?: queuedApps.firstOrNull()?.appName ?: "Backup"
     val currentPackageName = progress?.currentPackageName ?: queuedApps.firstOrNull()?.packageName ?: ""
-    val currentStepText = progress?.subStep?.label ?: "Backup USER"
+    val currentStepText = when {
+        progress == null -> "Backup USER"
+        progress.subStep == BackupSubStep.UPLOAD -> progress.currentStep.ifBlank { "Live GDrive Upload" }
+        progress.currentStep.isNotBlank() && progress.currentStep != "Initializing…" -> progress.currentStep
+        else -> progress.subStep.label
+    }
     val progressFraction = progress?.progressFraction ?: 0f
     val appIndex = progress?.appIndex ?: 1
     val totalApps = progress?.totalApps ?: queuedApps.size.coerceAtLeast(1)

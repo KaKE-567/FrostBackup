@@ -171,7 +171,7 @@ class BackupEngine(private val context: Context) {
                 val uploadFile = File(finalBundlePath)
                 val totalBytes = uploadFile.length().coerceAtLeast(1L)
                 val totalMb = totalBytes / (1024f * 1024f)
-                onProgress(BackupProgress("Starting Google Drive upload…", 0.90f, app.appName, app.packageName, BackupSubStep.UPLOAD))
+                onProgress(BackupProgress("Starting Live GDrive upload…", 0.90f, app.appName, app.packageName, BackupSubStep.UPLOAD))
                 val drive = GoogleDriveManager(context)
                 if (drive.isConnected()) {
                     val uploadSuccess = drive.uploadBackup(
@@ -182,7 +182,7 @@ class BackupEngine(private val context: Context) {
                             val percent = (uploadFrac * 100).toInt()
                             val progressText = String.format(
                                 java.util.Locale.US,
-                                "Uploading to Drive: %.1f / %.1f MB (%d%%)",
+                                "Live GDrive Upload: %.1f / %.1f MB (%d%%)",
                                 currentMb, totalMb, percent
                             )
                             val totalFraction = 0.90f + (uploadFrac * 0.09f)
@@ -192,7 +192,7 @@ class BackupEngine(private val context: Context) {
                     if (uploadSuccess) {
                         cloudUploaded = true
                     } else {
-                        onProgress(BackupProgress("Google Drive upload failed (saved locally)", 0.98f, app.appName, app.packageName, BackupSubStep.UPLOAD))
+                        onProgress(BackupProgress("Live GDrive upload failed (saved locally)", 0.98f, app.appName, app.packageName, BackupSubStep.UPLOAD))
                     }
                 }
             }
