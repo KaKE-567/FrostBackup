@@ -675,110 +675,110 @@ fun AppListScreen(
                 )
             }
         }
-    }
 
-    // Fullscreen DataBackup-style Execution Flow (insp1.png & insp2.png)
-    if (isExecutionActive && executionQueuedApps.isNotEmpty()) {
-        BackupExecutionFlow(
-            queuedApps = executionQueuedApps,
-            isProcessing = isProcessing,
-            progress = activeProgress,
-            onStartProcessing = {
-                isProcessing = true
-                scope.launch {
-                    val engine = BackupEngine(context)
-                    val destination = backupRepository.getBackupDirectory()
-                    val config = BackupConfig(
-                        includeApk = true,
-                        includeInternalData = true,
-                        includeExternalData = false,
-                        includeSSAID = true,
-                        includeKeystore = true,
-                        encrypt = false,
-                        encryptionPassword = null,
-                        uploadToCloud = false
-                    )
-
-                    for ((index, app) in executionQueuedApps.withIndex()) {
-                        val appNumber = index + 1
-                        activeProgress = BackupProgress(
-                            currentStep = "Initializing…",
-                            progressFraction = 0.05f,
-                            currentApp = app.appName,
-                            currentPackageName = app.packageName,
-                            subStep = BackupSubStep.PREPARING,
-                            appIndex = appNumber,
-                            totalApps = executionQueuedApps.size,
-                            isPreprocessing = false
+        // Fullscreen DataBackup-style Execution Flow (insp1.png & insp2.png)
+        if (isExecutionActive && executionQueuedApps.isNotEmpty()) {
+            BackupExecutionFlow(
+                queuedApps = executionQueuedApps,
+                isProcessing = isProcessing,
+                progress = activeProgress,
+                onStartProcessing = {
+                    isProcessing = true
+                    scope.launch {
+                        val engine = BackupEngine(context)
+                        val destination = backupRepository.getBackupDirectory()
+                        val config = BackupConfig(
+                            includeApk = true,
+                            includeInternalData = true,
+                            includeExternalData = false,
+                            includeSSAID = true,
+                            includeKeystore = true,
+                            encrypt = false,
+                            encryptionPassword = null,
+                            uploadToCloud = false
                         )
-                        val result = engine.performBackup(app, config, destination) { prog ->
-                            activeProgress = prog.copy(
+
+                        for ((index, app) in executionQueuedApps.withIndex()) {
+                            val appNumber = index + 1
+                            activeProgress = BackupProgress(
+                                currentStep = "Initializing…",
+                                progressFraction = 0.05f,
+                                currentApp = app.appName,
+                                currentPackageName = app.packageName,
+                                subStep = BackupSubStep.PREPARING,
                                 appIndex = appNumber,
                                 totalApps = executionQueuedApps.size,
                                 isPreprocessing = false
                             )
+                            val result = engine.performBackup(app, config, destination) { prog ->
+                                activeProgress = prog.copy(
+                                    appIndex = appNumber,
+                                    totalApps = executionQueuedApps.size,
+                                    isPreprocessing = false
+                                )
+                            }
+
+                            if (result is BackupResult.Error) {
+                                snackbarHostState.showSnackbar("Error on ${app.appName}: ${result.message}")
+                            }
                         }
 
-                        if (result is BackupResult.Error) {
-                            snackbarHostState.showSnackbar("Error on ${app.appName}: ${result.message}")
+                        // Done State
+                        activeProgress = BackupProgress(
+                            currentStep = "All operations completed successfully",
+                            progressFraction = 1f,
+                            currentApp = "Completed",
+                            currentPackageName = "",
+                            subStep = BackupSubStep.DONE,
+                            appIndex = executionQueuedApps.size,
+                            totalApps = executionQueuedApps.size,
+                            isPreprocessing = false,
+                            isFinished = true
+                        )
+
+                        selectedPackages.clear()
+                        BackupRepository.invalidateCache()
+                        AppRepository.invalidateCache()
+                        scope.launch {
+                            backupRepository.refreshBackups(forceRefresh = true)
+                            reloadApps(forceRefresh = true)
                         }
                     }
+                },
+                onDismiss = {
+                    isExecutionActive = false
+                    isProcessing = false
+                    activeProgress = null
+                    executionQueuedApps = emptyList()
+                }
+            )
+        }
 
-                    // Done State
-                    activeProgress = BackupProgress(
-                        currentStep = "All operations completed successfully",
-                        progressFraction = 1f,
-                        currentApp = "Completed",
-                        currentPackageName = "",
-                        subStep = BackupSubStep.DONE,
-                        appIndex = executionQueuedApps.size,
-                        totalApps = executionQueuedApps.size,
-                        isPreprocessing = false,
-                        isFinished = true
-                    )
-
-                    selectedPackages.clear()
-                    BackupRepository.invalidateCache()
+        // Storage Location Selector Sheet
+        if (showStorageSheet) {
+            StorageSelectorSheet(
+                availableTargets = availableTargets,
+                currentStoragePath = currentStorageDirectory.absolutePath,
+                onSelectTarget = { target ->
+                    backupRepository.setBackupDirectory(target.backupDirectoryPath)
+                    currentStorageDirectory = File(target.backupDirectoryPath)
                     AppRepository.invalidateCache()
                     scope.launch {
-                        backupRepository.refreshBackups(forceRefresh = true)
                         reloadApps(forceRefresh = true)
                     }
-                }
-            },
-            onDismiss = {
-                isExecutionActive = false
-                isProcessing = false
-                activeProgress = null
-                executionQueuedApps = emptyList()
-            }
-        )
-    }
-
-    // Storage Location Selector Sheet
-    if (showStorageSheet) {
-        StorageSelectorSheet(
-            availableTargets = availableTargets,
-            currentStoragePath = currentStorageDirectory.absolutePath,
-            onSelectTarget = { target ->
-                backupRepository.setBackupDirectory(target.backupDirectoryPath)
-                currentStorageDirectory = File(target.backupDirectoryPath)
-                AppRepository.invalidateCache()
-                scope.launch {
-                    reloadApps(forceRefresh = true)
-                }
-                showStorageSheet = false
-            },
-            onCustomPathSelected = { customPath ->
-                backupRepository.setBackupDirectory(customPath)
-                currentStorageDirectory = File(customPath)
-                AppRepository.invalidateCache()
-                scope.launch {
-                    reloadApps(forceRefresh = true)
-                }
-                showStorageSheet = false
-            },
-            onDismissRequest = { showStorageSheet = false }
-        )
+                    showStorageSheet = false
+                },
+                onCustomPathSelected = { customPath ->
+                    backupRepository.setBackupDirectory(customPath)
+                    currentStorageDirectory = File(customPath)
+                    AppRepository.invalidateCache()
+                    scope.launch {
+                        reloadApps(forceRefresh = true)
+                    }
+                    showStorageSheet = false
+                },
+                onDismissRequest = { showStorageSheet = false }
+            )
+        }
     }
 }

@@ -62,6 +62,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import io.github.project.vault.core.backup.BackupProgress
 import io.github.project.vault.core.backup.BackupSubStep
 import io.github.project.vault.core.restore.RestoreProgress
@@ -142,29 +144,38 @@ fun BackupExecutionFlow(
     val appIndex = progress?.appIndex ?: 1
     val totalApps = progress?.totalApps ?: queuedApps.size.coerceAtLeast(1)
 
-    ExecutionFlowSurface(
-        operationType = "Backup",
-        queuedApps = queuedApps,
-        isProcessing = isProcessing,
-        isFinished = isFinished,
-        isFailed = isFailed,
-        errorMessage = progress?.errorMessage,
-        currentApp = currentApp,
-        currentPackageName = currentPackageName,
-        currentStepText = currentStepText,
-        progressFraction = progressFraction,
-        appIndex = appIndex,
-        totalApps = totalApps,
-        checklist = checklist,
-        onActionClick = {
-            if (!isProcessing) {
-                onStartProcessing()
-            } else if (isFinished || isFailed) {
+    Dialog(
+        onDismissRequest = {
+            if (!isProcessing || isFinished || isFailed) {
                 onDismiss()
             }
         },
-        onDismiss = onDismiss
-    )
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        ExecutionFlowSurface(
+            operationType = "Backup",
+            queuedApps = queuedApps,
+            isProcessing = isProcessing,
+            isFinished = isFinished,
+            isFailed = isFailed,
+            errorMessage = progress?.errorMessage,
+            currentApp = currentApp,
+            currentPackageName = currentPackageName,
+            currentStepText = currentStepText,
+            progressFraction = progressFraction,
+            appIndex = appIndex,
+            totalApps = totalApps,
+            checklist = checklist,
+            onActionClick = {
+                if (!isProcessing) {
+                    onStartProcessing()
+                } else if (isFinished || isFailed) {
+                    onDismiss()
+                }
+            },
+            onDismiss = onDismiss
+        )
+    }
 }
 
 /**
@@ -219,27 +230,36 @@ fun RestoreExecutionFlow(
         ChecklistItem("Apply Permissions", "Enforcing UID and SELinux contexts", statusFor(RestoreSubStep.PERMISSIONS))
     )
 
-    ExecutionFlowSurface(
-        operationType = "Restore",
-        queuedApps = emptyList(),
-        isProcessing = true,
-        isFinished = isFinished,
-        isFailed = isFailed,
-        errorMessage = progress.errorMessage,
-        currentApp = progress.currentApp,
-        currentPackageName = progress.currentPackageName,
-        currentStepText = progress.subStep.label,
-        progressFraction = progress.progressFraction,
-        appIndex = progress.appIndex,
-        totalApps = progress.totalApps,
-        checklist = checklist,
-        onActionClick = {
+    Dialog(
+        onDismissRequest = {
             if (isFinished || isFailed) {
                 onDismiss()
             }
         },
-        onDismiss = onDismiss
-    )
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        ExecutionFlowSurface(
+            operationType = "Restore",
+            queuedApps = emptyList(),
+            isProcessing = true,
+            isFinished = isFinished,
+            isFailed = isFailed,
+            errorMessage = progress.errorMessage,
+            currentApp = progress.currentApp,
+            currentPackageName = progress.currentPackageName,
+            currentStepText = progress.subStep.label,
+            progressFraction = progress.progressFraction,
+            appIndex = progress.appIndex,
+            totalApps = progress.totalApps,
+            checklist = checklist,
+            onActionClick = {
+                if (isFinished || isFailed) {
+                    onDismiss()
+                }
+            },
+            onDismiss = onDismiss
+        )
+    }
 }
 
 @Composable
