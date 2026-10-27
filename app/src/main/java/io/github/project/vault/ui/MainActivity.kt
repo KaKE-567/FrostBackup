@@ -8,7 +8,11 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -17,15 +21,28 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,11 +50,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -141,40 +161,107 @@ class MainActivity : ComponentActivity() {
                                 containerColor = Color.Transparent,
                                 contentColor = MaterialTheme.colorScheme.onBackground,
                                 bottomBar = {
-                                    NavigationBar(
-                                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                                        tonalElevation = 2.dp
+                                    Surface(
+                                        modifier = Modifier
+                                            .navigationBarsPadding()
+                                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                                            .height(64.dp)
+                                            .fillMaxWidth()
+                                            .clip(CircleShape),
+                                        color = MaterialTheme.colorScheme.surfaceContainer,
+                                        tonalElevation = 0.dp
                                     ) {
-                                        screens.forEachIndexed { index, screen ->
-                                            val selected = (if (pagerState.isScrollInProgress) pagerState.targetPage else pagerState.currentPage) == index
-                                            NavigationBarItem(
-                                                selected = selected,
-                                                onClick = {
-                                                    if (pagerState.currentPage != index) {
-                                                        pagerScope.launch {
-                                                            pagerState.animateScrollToPage(
-                                                                page = index,
-                                                                animationSpec = tween(
-                                                                    durationMillis = 280,
-                                                                    easing = FastOutSlowInEasing
-                                                                )
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(horizontal = 6.dp),
+                                            horizontalArrangement = Arrangement.SpaceEvenly,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            screens.forEachIndexed { index, screen ->
+                                                val isSelected = (if (pagerState.isScrollInProgress) pagerState.targetPage else pagerState.currentPage) == index
+
+                                                val iconScale by animateFloatAsState(
+                                                    targetValue = if (isSelected) 1.1f else 1f,
+                                                    animationSpec = spring(
+                                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                        stiffness = Spring.StiffnessLow
+                                                    ),
+                                                    label = "tabIconScale"
+                                                )
+
+                                                val tabWeight by animateFloatAsState(
+                                                    targetValue = if (isSelected) 1.75f else 1.0f,
+                                                    animationSpec = spring(
+                                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                        stiffness = Spring.StiffnessLow
+                                                    ),
+                                                    label = "tabWeight"
+                                                )
+
+                                                Box(
+                                                    modifier = Modifier
+                                                        .weight(tabWeight)
+                                                        .fillMaxHeight()
+                                                        .clickable(
+                                                            interactionSource = remember { MutableInteractionSource() },
+                                                            indication = null
+                                                        ) {
+                                                            if (pagerState.currentPage != index) {
+                                                                pagerScope.launch {
+                                                                    pagerState.animateScrollToPage(
+                                                                        page = index,
+                                                                        animationSpec = tween(
+                                                                            durationMillis = 350,
+                                                                            easing = FastOutSlowInEasing
+                                                                        )
+                                                                    )
+                                                                }
+                                                            }
+                                                        },
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .graphicsLayer {
+                                                                scaleX = iconScale
+                                                                scaleY = iconScale
+                                                            }
+                                                            .height(42.dp)
+                                                            .fillMaxWidth(if (isSelected) 0.96f else 0.6f)
+                                                            .background(
+                                                                color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                                                                shape = CircleShape
                                                             )
+                                                            .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessLow)),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.Center,
+                                                            modifier = Modifier.padding(horizontal = if (isSelected) 10.dp else 0.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = screen.icon,
+                                                                contentDescription = screen.title,
+                                                                tint = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                modifier = Modifier.size(22.dp)
+                                                            )
+                                                            if (isSelected) {
+                                                                Spacer(modifier = Modifier.width(5.dp))
+                                                                Text(
+                                                                    text = screen.title,
+                                                                    style = MaterialTheme.typography.labelMedium,
+                                                                    fontWeight = FontWeight.SemiBold,
+                                                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                                    maxLines = 1,
+                                                                    overflow = TextOverflow.Visible
+                                                                )
+                                                            }
                                                         }
                                                     }
-                                                },
-                                                icon = { Icon(screen.icon, contentDescription = screen.title) },
-                                                label = {
-                                                    Text(
-                                                        text = screen.title,
-                                                        maxLines = 1,
-                                                        softWrap = false,
-                                                        overflow = TextOverflow.Ellipsis,
-                                                        style = MaterialTheme.typography.labelSmall.copy(
-                                                            fontSize = if (screen.title.length > 8) 10.sp else 11.sp
-                                                        )
-                                                    )
                                                 }
-                                            )
+                                            }
                                         }
                                     }
                                 },
