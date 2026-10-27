@@ -3,6 +3,7 @@ package io.github.project.vault.core.session
 import io.github.project.vault.core.root.RootShell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.regex.Pattern
 
 object SSAIDManager {

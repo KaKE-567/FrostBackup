@@ -238,9 +238,6 @@ class RestoreEngine(private val context: Context) {
                     needsReboot = true
                 }
             }
-                    needsReboot = true
-                }
-            }
 
             onProgress(RestoreProgress("Restore completed successfully!", 1.0f, metadata.appName, pkg, RestoreSubStep.DONE, isFinished = true))
             RestoreResult.Success(needsReboot)
