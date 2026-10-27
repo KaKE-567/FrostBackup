@@ -21,6 +21,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Check
@@ -79,6 +85,7 @@ import io.github.project.vault.core.backup.BackupSubStep
 import io.github.project.vault.core.root.RootShell
 import io.github.project.vault.core.storage.StorageLocationManager
 import io.github.project.vault.data.model.AppInfo
+import io.github.project.vault.data.model.BackupConfig
 import io.github.project.vault.data.model.BackupMetadata
 import io.github.project.vault.data.model.StorageTarget
 import io.github.project.vault.data.repository.AppRepository
