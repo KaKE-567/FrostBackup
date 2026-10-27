@@ -75,6 +75,7 @@ import io.github.project.vault.R
 import io.github.project.vault.core.backup.BackupEngine
 import io.github.project.vault.core.backup.BackupProgress
 import io.github.project.vault.core.backup.BackupResult
+import io.github.project.vault.core.backup.BackupSubStep
 import io.github.project.vault.core.root.RootShell
 import io.github.project.vault.core.storage.StorageLocationManager
 import io.github.project.vault.data.model.AppInfo
@@ -83,6 +84,7 @@ import io.github.project.vault.data.model.StorageTarget
 import io.github.project.vault.data.repository.AppRepository
 import io.github.project.vault.data.repository.BackupRepository
 import io.github.project.vault.ui.components.AppItemCard
+import io.github.project.vault.ui.components.BackupExecutionFlow
 import io.github.project.vault.ui.components.BackupProgressDialog
 import io.github.project.vault.ui.components.FloatingBackupBar
 import io.github.project.vault.ui.components.StatusBadge
@@ -666,22 +668,63 @@ fun AppListScreen(
                     val engine = BackupEngine(context)
                     val destination = backupRepository.getBackupDirectory()
 
-                    for (app in appsToBackup) {
-                        activeProgress = BackupProgress("Initializing…", 0.05f, app.appName)
+                    // Stage 1: Preprocessing Flow (Validating root, storage target, staging)
+                    activeProgress = BackupProgress(
+                        currentStep = "Necessary preparations",
+                        progressFraction = 0.05f,
+                        currentApp = "Preprocessing",
+                        currentPackageName = "",
+                        subStep = BackupSubStep.PREPARING,
+                        appIndex = 1,
+                        totalApps = appsToBackup.size,
+                        isPreprocessing = true
+                    )
+                    kotlinx.coroutines.delay(700)
+
+                    // Stage 2: Processing Flow (Iterate through apps)
+                    for ((index, app) in appsToBackup.withIndex()) {
+                        val appNumber = index + 1
+                        activeProgress = BackupProgress(
+                            currentStep = "Initializing…",
+                            progressFraction = 0.05f,
+                            currentApp = app.appName,
+                            currentPackageName = app.packageName,
+                            subStep = BackupSubStep.PREPARING,
+                            appIndex = appNumber,
+                            totalApps = appsToBackup.size,
+                            isPreprocessing = false
+                        )
                         val result = engine.performBackup(app, config, destination) { prog ->
-                            activeProgress = prog
+                            activeProgress = prog.copy(
+                                appIndex = appNumber,
+                                totalApps = appsToBackup.size,
+                                isPreprocessing = false
+                            )
                         }
 
                         when (result) {
                             is BackupResult.Success -> {
-                                snackbarHostState.showSnackbar("Backed up ${app.appName}")
+                                // App succeeded
                             }
                             is BackupResult.Error -> {
                                 snackbarHostState.showSnackbar("Error on ${app.appName}: ${result.message}")
                             }
                         }
                     }
-                    activeProgress = null
+
+                    // Stage 3: Finished / Done State
+                    activeProgress = BackupProgress(
+                        currentStep = "All operations completed successfully",
+                        progressFraction = 1f,
+                        currentApp = "Completed",
+                        currentPackageName = "",
+                        subStep = BackupSubStep.DONE,
+                        appIndex = appsToBackup.size,
+                        totalApps = appsToBackup.size,
+                        isPreprocessing = false,
+                        isFinished = true
+                    )
+
                     selectedPackages.clear()
                     BackupRepository.invalidateCache()
                     AppRepository.invalidateCache()
@@ -694,13 +737,13 @@ fun AppListScreen(
         )
     }
 
-    // Progress Dialog during active backup
+    // Fullscreen DataBackup-style Execution Flow
     activeProgress?.let { prog ->
-        BackupProgressDialog(
-            title = "Backing Up Application",
-            currentApp = prog.currentApp,
-            currentStep = prog.currentStep,
-            progressFraction = prog.progressFraction
+        BackupExecutionFlow(
+            progress = prog,
+            onDismiss = {
+                activeProgress = null
+            }
         )
     }
 

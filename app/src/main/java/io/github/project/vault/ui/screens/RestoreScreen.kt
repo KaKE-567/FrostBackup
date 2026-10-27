@@ -71,13 +71,14 @@ import androidx.compose.ui.unit.dp
 import io.github.project.vault.core.restore.RestoreEngine
 import io.github.project.vault.core.restore.RestoreProgress
 import io.github.project.vault.core.restore.RestoreResult
+import io.github.project.vault.core.restore.RestoreSubStep
 import io.github.project.vault.core.root.RootShell
 import io.github.project.vault.data.model.BackupMetadata
 import io.github.project.vault.data.repository.AppRepository
-import io.github.project.vault.ui.components.BackupProgressDialog
 import io.github.project.vault.data.repository.BackupRepository
 import io.github.project.vault.ui.components.AppIcon
 import io.github.project.vault.ui.components.BackupProgressDialog
+import io.github.project.vault.ui.components.RestoreExecutionFlow
 import io.github.project.vault.ui.components.StatusBadge
 import kotlinx.coroutines.launch
 import java.io.File
@@ -105,6 +106,7 @@ fun RestoreScreen(
     var passwordInput by remember { mutableStateOf("") }
     var showPasswordDialog by remember { mutableStateOf(false) }
     var showRebootDialog by remember { mutableStateOf(false) }
+    var pendingReboot by remember { mutableStateOf(false) }
 
     // Cloud upload progress state
     var cloudUploadActive by remember { mutableStateOf(false) }
@@ -290,9 +292,8 @@ fun RestoreScreen(
                                 showPasswordDialog = true
                             } else {
                                 scope.launch {
-                                    executeRestore(context, item, null, backupRepository, { activeProgress = it }, {
-                                        activeProgress = null
-                                        if (it) showRebootDialog = true
+                                    executeRestore(context, item, null, backupRepository, { activeProgress = it }, { needsReboot ->
+                                        pendingReboot = needsReboot
                                     }, snackbarHostState)
                                 }
                             }
@@ -355,9 +356,8 @@ fun RestoreScreen(
                         val pass = passwordInput
                         showPasswordDialog = false
                         scope.launch {
-                            executeRestore(context, item, pass, backupRepository, { activeProgress = it }, {
-                                activeProgress = null
-                                if (it) showRebootDialog = true
+                            executeRestore(context, item, pass, backupRepository, { activeProgress = it }, { needsReboot ->
+                                pendingReboot = needsReboot
                             }, snackbarHostState)
                         }
                     }
@@ -402,16 +402,6 @@ fun RestoreScreen(
         )
     }
 
-    // Progress Dialog during restore
-    activeProgress?.let { prog ->
-        BackupProgressDialog(
-            title = "Restoring Application",
-            currentApp = prog.currentApp,
-            currentStep = prog.currentStep,
-            progressFraction = prog.progressFraction
-        )
-    }
-
     // Progress Dialog during cloud upload
     if (cloudUploadActive) {
         BackupProgressDialog(
@@ -419,6 +409,20 @@ fun RestoreScreen(
             currentApp = cloudUploadAppName,
             currentStep = cloudUploadStatus,
             progressFraction = cloudUploadProgress
+        )
+    }
+
+    // Fullscreen DataBackup-style Restore Execution Flow
+    activeProgress?.let { prog ->
+        RestoreExecutionFlow(
+            progress = prog,
+            onDismiss = {
+                activeProgress = null
+                if (pendingReboot) {
+                    pendingReboot = false
+                    showRebootDialog = true
+                }
+            }
         )
     }
 }
@@ -435,17 +439,67 @@ private suspend fun executeRestore(
     val engine = RestoreEngine(context)
     val archiveFile = File(backupRepository.getBackupDirectory(), item.archiveFileName)
 
-    onProgress(RestoreProgress("Preparing restore…", 0.05f, item.appName))
+    // Stage 1: Preprocessing Flow
+    onProgress(
+        RestoreProgress(
+            currentStep = "Necessary preparations",
+            progressFraction = 0.05f,
+            currentApp = "Preprocessing",
+            currentPackageName = item.packageName,
+            subStep = RestoreSubStep.PREPARING,
+            appIndex = 1,
+            totalApps = 1,
+            isPreprocessing = true
+        )
+    )
+    kotlinx.coroutines.delay(650)
+
+    // Stage 2: Processing Flow
     val result = engine.performRestore(archiveFile, pass) { prog ->
-        onProgress(prog)
+        onProgress(
+            prog.copy(
+                currentApp = item.appName,
+                currentPackageName = item.packageName,
+                appIndex = 1,
+                totalApps = 1,
+                isPreprocessing = false
+            )
+        )
     }
 
     when (result) {
         is RestoreResult.Success -> {
+            onProgress(
+                RestoreProgress(
+                    currentStep = "All operations completed successfully",
+                    progressFraction = 1f,
+                    currentApp = item.appName,
+                    currentPackageName = item.packageName,
+                    subStep = RestoreSubStep.DONE,
+                    appIndex = 1,
+                    totalApps = 1,
+                    isPreprocessing = false,
+                    isFinished = true
+                )
+            )
             snackbarHostState.showSnackbar("Restored ${item.appName} successfully!")
             onFinished(result.needsReboot)
         }
         is RestoreResult.Error -> {
+            onProgress(
+                RestoreProgress(
+                    currentStep = "Restore failed",
+                    progressFraction = 1f,
+                    currentApp = item.appName,
+                    currentPackageName = item.packageName,
+                    subStep = RestoreSubStep.DONE,
+                    appIndex = 1,
+                    totalApps = 1,
+                    isPreprocessing = false,
+                    isFailed = true,
+                    errorMessage = result.message
+                )
+            )
             snackbarHostState.showSnackbar("Restore failed for ${item.appName}: ${result.message}")
             onFinished(false)
         }

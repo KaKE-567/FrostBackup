@@ -460,13 +460,6 @@ fun TelephonyScreen(
                                 )
                             }
                         }
-                            Icon(Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Backup Calls & SMS",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
-                            )
-                        }
                     }
                 }
             }

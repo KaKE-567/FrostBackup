@@ -35,12 +35,12 @@ class RestoreEngine(private val context: Context) {
         }
 
         try {
-            onProgress(RestoreProgress("Preparing restore environment…", 0.05f, ""))
+            onProgress(RestoreProgress("Preparing restore environment…", 0.05f, "", "", RestoreSubStep.PREPARING))
             RootShell.execute("mkdir -p $stagingPath")
 
             // 1. Decrypt if password provided or file is encrypted
             val effectiveArchiveFile = if (!password.isNullOrBlank()) {
-                onProgress(RestoreProgress("Decrypting backup archive…", 0.15f, ""))
+                onProgress(RestoreProgress("Decrypting backup archive…", 0.15f, "", "", RestoreSubStep.DECRYPTING))
                 val tempDecrypted = File(context.cacheDir, "decrypted_$timestamp.tar")
                 CryptoManager.decryptFile(safeArchiveFile, tempDecrypted, password)
                 decryptedTempFile = tempDecrypted
@@ -50,7 +50,7 @@ class RestoreEngine(private val context: Context) {
             }
 
             // 2. Unpack archive to staging directory
-            onProgress(RestoreProgress("Unpacking backup archive…", 0.25f, ""))
+            onProgress(RestoreProgress("Unpacking backup archive…", 0.25f, "", "", RestoreSubStep.UNPACKING))
             val unpackResult = RootShell.execute(
                 "tar -xpf ${effectiveArchiveFile.absolutePath} -C $stagingPath"
             )
@@ -67,11 +67,11 @@ class RestoreEngine(private val context: Context) {
             }
             val metadata = json.decodeFromString<BackupMetadata>(metaFileResult.stdout)
             val pkg = metadata.packageName
-            onProgress(RestoreProgress("Restoring ${metadata.appName}…", 0.35f, metadata.appName))
+            onProgress(RestoreProgress("Restoring ${metadata.appName}…", 0.35f, metadata.appName, pkg, RestoreSubStep.PREPARING))
 
             // 4. Reinstall APK if present
             if (metadata.hasApk) {
-                onProgress(RestoreProgress("Reinstalling APK packages…", 0.45f, metadata.appName))
+                onProgress(RestoreProgress("Reinstalling APK packages…", 0.45f, metadata.appName, pkg, RestoreSubStep.APK))
                 val apkFilesResult = RootShell.execute("ls -1 $stagingPath/apk/*.apk 2>/dev/null")
                 if (apkFilesResult.isSuccess && apkFilesResult.stdout.isNotBlank()) {
                     val apks = apkFilesResult.stdout.lines().map { it.trim() }.filter { it.endsWith(".apk") }
@@ -158,19 +158,20 @@ class RestoreEngine(private val context: Context) {
 
             // 7. Extract Internal Data
             if (metadata.hasData) {
-                onProgress(RestoreProgress("Restoring internal databases & sessions…", 0.65f, metadata.appName))
+                onProgress(RestoreProgress("Restoring internal databases & sessions…", 0.60f, metadata.appName, pkg, RestoreSubStep.USER))
                 RootShell.execute("tar -xpf $stagingPath/data.tar -C /data/data/")
+                onProgress(RestoreProgress("Restoring device encrypted data…", 0.70f, metadata.appName, pkg, RestoreSubStep.USER_DE))
                 RootShell.execute("tar -xpf $stagingPath/de_data.tar -C /data/user_de/0/ 2>/dev/null")
             }
 
             // 8. Extract External Data
             if (metadata.hasExternalData) {
-                onProgress(RestoreProgress("Restoring external storage files…", 0.75f, metadata.appName))
+                onProgress(RestoreProgress("Restoring external storage files…", 0.75f, metadata.appName, pkg, RestoreSubStep.DATA))
                 RootShell.execute("tar -xpf $stagingPath/ext_data.tar -C /sdcard/Android/data/ 2>/dev/null")
             }
 
             // 9. Re-map Linux UID / GID ownership & SELinux contexts
-            onProgress(RestoreProgress("Applying security & SELinux contexts…", 0.85f, metadata.appName))
+            onProgress(RestoreProgress("Applying security & SELinux contexts…", 0.85f, metadata.appName, pkg, RestoreSubStep.PERMISSIONS))
             RootShell.execute("chown -R $newUid:$newUid /data/data/$pkg")
             RootShell.execute("chmod 771 /data/data/$pkg")
             RootShell.execute("restorecon -R /data/data/$pkg")
@@ -178,7 +179,7 @@ class RestoreEngine(private val context: Context) {
 
             // 10. Restore Keystore Encryption Tokens
             if (metadata.hasKeystore) {
-                onProgress(RestoreProgress("Restoring Keystore cryptographic keys…", 0.90f, metadata.appName))
+                onProgress(RestoreProgress("Restoring Keystore cryptographic keys…", 0.90f, metadata.appName, pkg, RestoreSubStep.KEYSTORE))
                 val keystoreStaging = File(stagingPath, "keystore")
                 KeystoreManager.restoreKeystoreForUid(metadata.originalUid, newUid, keystoreStaging)
             }
@@ -189,14 +190,14 @@ class RestoreEngine(private val context: Context) {
             // 12. Restore SSAID (Preserve Login State)
             var needsReboot = false
             if (!metadata.ssaid.isNullOrBlank()) {
-                onProgress(RestoreProgress("Restoring SSAID device signature…", 0.95f, metadata.appName))
+                onProgress(RestoreProgress("Restoring SSAID device signature…", 0.95f, metadata.appName, pkg, RestoreSubStep.SSAID))
                 val ssaidRestored = SSAIDManager.restoreSSAID(pkg, metadata.ssaid)
                 if (ssaidRestored) {
                     needsReboot = true
                 }
             }
 
-            onProgress(RestoreProgress("Restore completed successfully!", 1.0f, metadata.appName))
+            onProgress(RestoreProgress("Restore completed successfully!", 1.0f, metadata.appName, pkg, RestoreSubStep.DONE, isFinished = true))
             RestoreResult.Success(needsReboot)
         } catch (e: Exception) {
             e.printStackTrace()

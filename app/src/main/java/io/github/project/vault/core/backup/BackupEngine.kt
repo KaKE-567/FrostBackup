@@ -44,14 +44,14 @@ class BackupEngine(private val context: Context) {
         }
 
         try {
-            onProgress(BackupProgress("Freezing app process…", 0.1f, app.appName))
+            onProgress(BackupProgress("Freezing app process…", 0.1f, app.appName, app.packageName, BackupSubStep.PREPARING))
             RootShell.execute("am force-stop ${app.packageName}")
             RootShell.execute("mkdir -p $payloadPath/apk $payloadPath/keystore")
             RootShell.execute("chmod -R 777 $stagingPath")
 
             // 1. Back up APKs
             if (config.includeApk) {
-                onProgress(BackupProgress("Backing up APK binaries…", 0.25f, app.appName))
+                onProgress(BackupProgress("Backing up APK binaries…", 0.25f, app.appName, app.packageName, BackupSubStep.APK))
                 RootShell.execute("cp -p ${app.sourceDir} $payloadPath/apk/base.apk")
                 app.splitSourceDirs.forEachIndexed { index, splitPath ->
                     RootShell.execute("cp -p $splitPath $payloadPath/apk/split_$index.apk")
@@ -61,13 +61,14 @@ class BackupEngine(private val context: Context) {
             // 2. Back up Internal Data (/data/data)
             var hasData = false
             if (config.includeInternalData) {
-                onProgress(BackupProgress("Archiving internal app data…", 0.45f, app.appName))
+                onProgress(BackupProgress("Archiving internal app data…", 0.40f, app.appName, app.packageName, BackupSubStep.USER))
                 val dataTarResult = RootShell.execute(
                     "tar -cpf $payloadPath/data.tar -C /data/data ${app.packageName} 2>/dev/null"
                 )
                 hasData = dataTarResult.isSuccess
 
                 // Device-encrypted data
+                onProgress(BackupProgress("Archiving device encrypted data…", 0.50f, app.appName, app.packageName, BackupSubStep.USER_DE))
                 RootShell.execute(
                     "tar -cpf $payloadPath/de_data.tar -C /data/user_de/0 ${app.packageName} 2>/dev/null"
                 )
@@ -76,7 +77,7 @@ class BackupEngine(private val context: Context) {
             // 3. Back up External Data (/sdcard/Android/data)
             var hasExtData = false
             if (config.includeExternalData) {
-                onProgress(BackupProgress("Archiving external storage data…", 0.60f, app.appName))
+                onProgress(BackupProgress("Archiving external storage data…", 0.60f, app.appName, app.packageName, BackupSubStep.DATA))
                 val extTarResult = RootShell.execute(
                     "tar -cpf $payloadPath/ext_data.tar -C /sdcard/Android/data ${app.packageName} 2>/dev/null"
                 )
@@ -86,14 +87,14 @@ class BackupEngine(private val context: Context) {
             // 4. Capture SSAID Session Token
             var ssaid: String? = null
             if (config.includeSSAID) {
-                onProgress(BackupProgress("Extracting SSAID login identifier…", 0.70f, app.appName))
+                onProgress(BackupProgress("Extracting SSAID login identifier…", 0.70f, app.appName, app.packageName, BackupSubStep.SSAID))
                 ssaid = SSAIDManager.getSSAID(app.packageName)
             }
 
             // 5. Capture Keystore
             var hasKeystore = false
             if (config.includeKeystore) {
-                onProgress(BackupProgress("Extracting Keystore encryption tokens…", 0.75f, app.appName))
+                onProgress(BackupProgress("Extracting Keystore encryption tokens…", 0.75f, app.appName, app.packageName, BackupSubStep.KEYSTORE))
                 val keystoreStaging = File(payloadPath, "keystore")
                 hasKeystore = KeystoreManager.backupKeystoreForUid(app.uid, keystoreStaging)
             }
@@ -138,7 +139,7 @@ class BackupEngine(private val context: Context) {
             RootShell.execute("cp ${metaFile.absolutePath} $payloadPath/metadata.json")
 
             // 8. Package staging folder into bundle inside app cache staging area
-            onProgress(BackupProgress("Compressing backup package…", 0.85f, app.appName))
+            onProgress(BackupProgress("Compressing backup package…", 0.85f, app.appName, app.packageName, BackupSubStep.COMPRESSING))
             val rawBundlePath = "$stagingPath/bundle.tar"
             val finalBundlePath = "$stagingPath/$baseFileName"
 
@@ -150,7 +151,7 @@ class BackupEngine(private val context: Context) {
 
             // 9. Client-Side Encryption
             if (config.encrypt && !config.encryptionPassword.isNullOrBlank()) {
-                onProgress(BackupProgress("Encrypting archive with AES-256…", 0.90f, app.appName))
+                onProgress(BackupProgress("Encrypting archive with AES-256…", 0.90f, app.appName, app.packageName, BackupSubStep.ENCRYPTING))
                 CryptoManager.encryptFile(File(rawBundlePath), File(finalBundlePath), config.encryptionPassword)
                 RootShell.execute("rm -f $rawBundlePath")
             } else {
@@ -159,7 +160,7 @@ class BackupEngine(private val context: Context) {
             RootShell.execute("chmod 666 $finalBundlePath")
 
             // 10. Copy final archive to storage destination via root
-            onProgress(BackupProgress("Saving archive to storage…", 0.93f, app.appName))
+            onProgress(BackupProgress("Saving archive to storage…", 0.93f, app.appName, app.packageName, BackupSubStep.COMPRESSING))
             RootShell.execute("cp -f $finalBundlePath ${finalArchiveFile.absolutePath}")
             RootShell.execute("chmod 666 ${finalArchiveFile.absolutePath} 2>/dev/null")
             RootShell.execute("am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d \"file://${finalArchiveFile.absolutePath}\" 2>/dev/null")
@@ -170,7 +171,7 @@ class BackupEngine(private val context: Context) {
                 val uploadFile = File(finalBundlePath)
                 val totalBytes = uploadFile.length().coerceAtLeast(1L)
                 val totalMb = totalBytes / (1024f * 1024f)
-                onProgress(BackupProgress("Starting Google Drive upload…", 0.90f, app.appName))
+                onProgress(BackupProgress("Starting Google Drive upload…", 0.90f, app.appName, app.packageName, BackupSubStep.UPLOAD))
                 val drive = GoogleDriveManager(context)
                 if (drive.isConnected()) {
                     val uploadSuccess = drive.uploadBackup(
@@ -185,13 +186,13 @@ class BackupEngine(private val context: Context) {
                                 currentMb, totalMb, percent
                             )
                             val totalFraction = 0.90f + (uploadFrac * 0.09f)
-                            onProgress(BackupProgress(progressText, totalFraction, app.appName))
+                            onProgress(BackupProgress(progressText, totalFraction, app.appName, app.packageName, BackupSubStep.UPLOAD))
                         }
                     )
                     if (uploadSuccess) {
                         cloudUploaded = true
                     } else {
-                        onProgress(BackupProgress("Google Drive upload failed (saved locally)", 0.98f, app.appName))
+                        onProgress(BackupProgress("Google Drive upload failed (saved locally)", 0.98f, app.appName, app.packageName, BackupSubStep.UPLOAD))
                     }
                 }
             }
@@ -205,7 +206,7 @@ class BackupEngine(private val context: Context) {
                 "Backup completed successfully!"
             }
 
-            onProgress(BackupProgress(completionMessage, 1.0f, app.appName))
+            onProgress(BackupProgress(completionMessage, 1.0f, app.appName, app.packageName, BackupSubStep.DONE, isFinished = true))
             BackupResult.Success(finalArchiveFile.absolutePath, finalSize)
         } catch (e: Exception) {
             e.printStackTrace()
