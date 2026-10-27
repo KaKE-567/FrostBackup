@@ -223,8 +223,8 @@ fun AppListScreen(
     }
 
     LaunchedEffect(isSelected) {
-        if (isSelected) {
-            reloadApps(forceRefresh = true)
+        if (isSelected && rawApps.isEmpty()) {
+            reloadApps(forceRefresh = false)
         }
     }
 

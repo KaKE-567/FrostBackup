@@ -127,7 +127,7 @@ fun TelephonyScreen(
     }
 
     LaunchedEffect(isSelected) {
-        if (isSelected) {
+        if (isSelected && (smsCount == 0 && callCount == 0 && wifiCount == 0)) {
             refreshData()
         }
     }
@@ -433,30 +433,38 @@ fun TelephonyScreen(
                                 },
                                 enabled = includeSms || includeCalls || includeWifi,
                                 shape = RoundedCornerShape(16.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                                 modifier = Modifier
-                                    .weight(1.4f)
-                                    .height(50.dp)
+                                    .weight(1.3f)
+                                    .height(48.dp)
                             ) {
                                 Icon(Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = "Backup Records",
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold)
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
 
                             OutlinedButton(
                                 onClick = { showWifiViewer = true },
                                 shape = RoundedCornerShape(16.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(50.dp)
+                                    .height(48.dp)
                             ) {
                                 Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = "Passwords",
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold)
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }

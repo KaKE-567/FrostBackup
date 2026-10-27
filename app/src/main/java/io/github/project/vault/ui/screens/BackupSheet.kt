@@ -159,8 +159,8 @@ fun BackupSheet(
             }
 
             BackupOptionRow(
-                title = "Live Google Drive Upload",
-                subtitle = "Stream encrypted backup live to your Google Cloud",
+                title = "GDrive Backup",
+                subtitle = "Upload backup directly to Google Drive",
                 checked = uploadToCloud,
                 onCheckedChange = { uploadToCloud = it }
             )

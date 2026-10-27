@@ -46,6 +46,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -149,9 +150,17 @@ class MainActivity : ComponentActivity() {
                                 Screen.Cloud,
                                 Screen.Settings
                             )
+                            var selectedTab by remember { mutableIntStateOf(0) }
                             val pagerState = rememberPagerState(initialPage = 0, pageCount = { screens.size })
 
-                            BackHandler(enabled = pagerState.currentPage != 0) {
+                            LaunchedEffect(pagerState.settledPage) {
+                                if (pagerState.settledPage != selectedTab) {
+                                    selectedTab = pagerState.settledPage
+                                }
+                            }
+
+                            BackHandler(enabled = selectedTab != 0) {
+                                selectedTab = 0
                                 pagerScope.launch {
                                     pagerState.animateScrollToPage(0)
                                 }
@@ -179,7 +188,7 @@ class MainActivity : ComponentActivity() {
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             screens.forEachIndexed { index, screen ->
-                                                val isSelected = (if (pagerState.isScrollInProgress) pagerState.targetPage else pagerState.currentPage) == index
+                                                val isSelected = selectedTab == index
 
                                                 val iconScale by animateFloatAsState(
                                                     targetValue = if (isSelected) 1.1f else 1f,
@@ -207,6 +216,7 @@ class MainActivity : ComponentActivity() {
                                                             interactionSource = remember { MutableInteractionSource() },
                                                             indication = null
                                                         ) {
+                                                            selectedTab = index
                                                             if (pagerState.currentPage != index) {
                                                                 pagerScope.launch {
                                                                     pagerState.animateScrollToPage(
@@ -279,15 +289,15 @@ class MainActivity : ComponentActivity() {
                                         0 -> AppListScreen(
                                             appRepository = appRepository,
                                             backupRepository = backupRepository,
-                                            isSelected = (pagerState.currentPage == 0)
+                                            isSelected = (selectedTab == 0)
                                         )
                                         1 -> TelephonyScreen(
                                             telephonyRepository = telephonyRepository,
-                                            isSelected = (pagerState.currentPage == 1)
+                                            isSelected = (selectedTab == 1)
                                         )
                                         2 -> RestoreScreen(
                                             backupRepository = backupRepository,
-                                            isSelected = (pagerState.currentPage == 2)
+                                            isSelected = (selectedTab == 2)
                                         )
                                         3 -> CloudScreen(backupRepository = backupRepository)
                                         4 -> SettingsScreen(

@@ -10,7 +10,7 @@ enum class BackupSubStep(val label: String) {
     KEYSTORE("Backup Keystore"),
     COMPRESSING("Compressing archive"),
     ENCRYPTING("Encrypting archive"),
-    UPLOAD("Live GDrive Upload"),
+    UPLOAD("GDrive Backup"),
     DONE("Completed")
 }
 
