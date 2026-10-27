@@ -14,14 +14,13 @@ object KeystoreManager {
         val stagingPath = targetStagingDir.absolutePath
         val script = listOf(
             "mkdir -p $stagingPath",
-            // Find and copy legacy keystore files matching ${uid}_*
-            "find $KEYSTORE_DIR -maxdepth 1 -name '${uid}_*' -exec cp -p {} $stagingPath/ \\; 2>/dev/null",
-            // Also check for subdirectories if any
+            // Find and copy ALL keystore files matching .${uid}_* AND ${uid}_*
+            "find $KEYSTORE_DIR -maxdepth 1 \\( -name '.${uid}_*' -o -name '${uid}_*' \\) -exec cp -p {} $stagingPath/ \\; 2>/dev/null",
+            // Check if any files were copied
             "ls -A $stagingPath"
         )
         val result = RootShell.executeBatch(script)
-        // If files exist in staging directory, backup succeeded
-        result.isSuccess
+        result.isSuccess && result.stdout.isNotBlank()
     }
 
     suspend fun restoreKeystoreForUid(oldUid: Int, newUid: Int, sourceStagingDir: File): Boolean = withContext(Dispatchers.IO) {
@@ -29,15 +28,18 @@ object KeystoreManager {
 
         val stagingPath = sourceStagingDir.absolutePath
         val script = listOf(
-            // Rename files from old UID to new UID in staging area
             "cd $stagingPath",
-            "for f in ${oldUid}_*; do [ -f \"\$f\" ] && mv \"\$f\" \"\${f/${oldUid}_/${newUid}_}\"; done 2>/dev/null",
-            // Copy renamed files to Keystore directory
+            // Rename any .${oldUid}_* files to .${newUid}_*
+            "for f in .${oldUid}_*; do [ -f \"\$f\" ] && mv \"\$f\" \".${newUid}_\${f#.${oldUid}_}\"; done 2>/dev/null",
+            // Rename any ${oldUid}_* files to ${newUid}_*
+            "for f in ${oldUid}_*; do [ -f \"\$f\" ] && mv \"\$f\" \"${newUid}_\${f#${oldUid}_}\"; done 2>/dev/null",
+            // Copy renamed files to Keystore directory (including hidden files!)
+            "cp -p $stagingPath/.* $KEYSTORE_DIR/ 2>/dev/null",
             "cp -p $stagingPath/* $KEYSTORE_DIR/ 2>/dev/null",
-            // Fix ownership and security context
-            "chown keystore:keystore $KEYSTORE_DIR/${newUid}_* 2>/dev/null",
-            "chmod 600 $KEYSTORE_DIR/${newUid}_* 2>/dev/null",
-            "restorecon $KEYSTORE_DIR/${newUid}_* 2>/dev/null"
+            // Fix ownership, permissions, and SELinux contexts
+            "chown keystore:keystore $KEYSTORE_DIR/.${newUid}_* $KEYSTORE_DIR/${newUid}_* 2>/dev/null",
+            "chmod 600 $KEYSTORE_DIR/.${newUid}_* $KEYSTORE_DIR/${newUid}_* 2>/dev/null",
+            "restorecon $KEYSTORE_DIR/.${newUid}_* $KEYSTORE_DIR/${newUid}_* 2>/dev/null"
         )
         val result = RootShell.executeBatch(script)
         result.isSuccess

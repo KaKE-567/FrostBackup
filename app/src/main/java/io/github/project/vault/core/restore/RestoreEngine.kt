@@ -1,6 +1,8 @@
 package io.github.project.vault.core.restore
 
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import io.github.project.vault.core.crypto.CryptoManager
 import io.github.project.vault.core.root.RootShell
 import io.github.project.vault.core.session.KeystoreManager
@@ -114,31 +116,60 @@ class RestoreEngine(private val context: Context) {
 
             var resolvedUid: Int? = null
 
-            // Tier 1: Fast standard pm list packages -U
-            val pmRes = RootShell.execute("pm list packages -U $pkg 2>/dev/null")
-            val pmMatch = Regex("""uid:(\d+)""").find(pmRes.stdout)
-            resolvedUid = pmMatch?.groupValues?.get(1)?.toIntOrNull()
+            // Tier 0: Direct Android PackageManager query from this app
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    resolvedUid = context.packageManager.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0)).applicationInfo?.uid
+                } else {
+                    @Suppress("DEPRECATION")
+                    resolvedUid = context.packageManager.getPackageInfo(pkg, 0).applicationInfo?.uid
+                }
+            } catch (_: Exception) { }
 
-            // Tier 2: Direct lookup in /data/system/packages.list
-            if (resolvedUid == null) {
-                val pkgListRes = RootShell.execute("awk '\$1 == \"$pkg\" {print \$2}' /data/system/packages.list 2>/dev/null")
-                resolvedUid = pkgListRes.stdout.trim().toIntOrNull()
+            // Tier 1: Fast direct parse of /data/system/packages.list in Kotlin (no awk needed)
+            if (resolvedUid == null || resolvedUid < 10000) {
+                val pkgListRes = RootShell.execute("cat /data/system/packages.list 2>/dev/null")
+                if (pkgListRes.isSuccess && pkgListRes.stdout.isNotBlank()) {
+                    for (line in pkgListRes.stdout.lineSequence()) {
+                        val parts = line.trim().split(Regex("\\s+"))
+                        if (parts.size >= 2 && parts[0] == pkg) {
+                            val candidate = parts[1].toIntOrNull()
+                            if (candidate != null && candidate >= 10000) {
+                                resolvedUid = candidate
+                                break
+                            }
+                        }
+                    }
+                }
             }
 
-            // Tier 3: stat ownership on /data/data/$pkg or /data/user/0/$pkg
-            if (resolvedUid == null) {
+            // Tier 2: Standard pm list packages -U
+            if (resolvedUid == null || resolvedUid < 10000) {
+                val pmRes = RootShell.execute("pm list packages -U $pkg 2>/dev/null")
+                val pmMatch = Regex("""uid:(\d+)""").find(pmRes.stdout)
+                val candidate = pmMatch?.groupValues?.get(1)?.toIntOrNull()
+                if (candidate != null && candidate >= 10000) {
+                    resolvedUid = candidate
+                }
+            }
+
+            // Tier 3: dumpsys package $pkg
+            if (resolvedUid == null || resolvedUid < 10000) {
+                val uidResult = RootShell.execute("dumpsys package $pkg 2>/dev/null")
+                val uidMatch = Regex("""(?:userId|appId|uid)=(\d+)""").find(uidResult.stdout)
+                val candidate = uidMatch?.groupValues?.get(1)?.toIntOrNull()
+                if (candidate != null && candidate >= 10000) {
+                    resolvedUid = candidate
+                }
+            }
+
+            // Tier 4: stat ownership on /data/data/$pkg or /data/user/0/$pkg
+            if (resolvedUid == null || resolvedUid < 10000) {
                 val statRes = RootShell.execute("stat -c %u /data/data/$pkg 2>/dev/null || stat -c %u /data/user/0/$pkg 2>/dev/null")
                 val statUid = statRes.stdout.trim().toIntOrNull()
                 if (statUid != null && statUid >= 10000) {
                     resolvedUid = statUid
                 }
-            }
-
-            // Tier 4: dumpsys package (handles userId=, appId=, and uid=)
-            if (resolvedUid == null) {
-                val uidResult = RootShell.execute("dumpsys package $pkg 2>/dev/null | grep -E -m 1 '(userId=|appId=|uid=)'")
-                val uidMatch = Regex("""(?:userId|appId|uid)=(\d+)""").find(uidResult.stdout)
-                resolvedUid = uidMatch?.groupValues?.get(1)?.toIntOrNull()
             }
 
             if (resolvedUid == null) {
@@ -159,23 +190,34 @@ class RestoreEngine(private val context: Context) {
             // 7. Extract Internal Data
             if (metadata.hasData) {
                 onProgress(RestoreProgress("Restoring internal databases & sessions…", 0.60f, metadata.appName, pkg, RestoreSubStep.USER))
-                RootShell.execute("tar -xpf $stagingPath/data.tar -C /data/data/")
+                RootShell.execute("mkdir -p /data/data/$pkg 2>/dev/null || mkdir -p /data/user/0/$pkg 2>/dev/null")
+                RootShell.execute("tar -xpf $stagingPath/data.tar -C /data/data/ 2>/dev/null || tar -xpf $stagingPath/data.tar -C /data/user/0/ 2>/dev/null")
                 onProgress(RestoreProgress("Restoring device encrypted data…", 0.70f, metadata.appName, pkg, RestoreSubStep.USER_DE))
+                RootShell.execute("mkdir -p /data/user_de/0/$pkg 2>/dev/null")
                 RootShell.execute("tar -xpf $stagingPath/de_data.tar -C /data/user_de/0/ 2>/dev/null")
             }
 
             // 8. Extract External Data
             if (metadata.hasExternalData) {
                 onProgress(RestoreProgress("Restoring external storage files…", 0.75f, metadata.appName, pkg, RestoreSubStep.DATA))
+                RootShell.execute("mkdir -p /sdcard/Android/data/$pkg 2>/dev/null")
                 RootShell.execute("tar -xpf $stagingPath/ext_data.tar -C /sdcard/Android/data/ 2>/dev/null")
             }
 
             // 9. Re-map Linux UID / GID ownership & SELinux contexts
             onProgress(RestoreProgress("Applying security & SELinux contexts…", 0.85f, metadata.appName, pkg, RestoreSubStep.PERMISSIONS))
-            RootShell.execute("chown -R $newUid:$newUid /data/data/$pkg")
-            RootShell.execute("chmod 771 /data/data/$pkg")
-            RootShell.execute("restorecon -R /data/data/$pkg")
+            // Fix /data/data ownership, permissions, and SELinux
+            RootShell.execute("chown -R $newUid:$newUid /data/data/$pkg 2>/dev/null")
+            RootShell.execute("chmod -R 771 /data/data/$pkg 2>/dev/null")
+            RootShell.execute("restorecon -R /data/data/$pkg 2>/dev/null")
+
+            // Fix /data/user_de/0 ownership, permissions, and SELinux (CRITICAL for Jetpack Security EncryptedSharedPreferences and auth tokens!)
+            RootShell.execute("chown -R $newUid:$newUid /data/user_de/0/$pkg 2>/dev/null")
+            RootShell.execute("chmod -R 771 /data/user_de/0/$pkg 2>/dev/null")
             RootShell.execute("restorecon -R /data/user_de/0/$pkg 2>/dev/null")
+
+            // Fix /sdcard/Android/data SELinux
+            RootShell.execute("restorecon -R /sdcard/Android/data/$pkg 2>/dev/null")
 
             // 10. Restore Keystore Encryption Tokens
             if (metadata.hasKeystore) {
@@ -191,8 +233,11 @@ class RestoreEngine(private val context: Context) {
             var needsReboot = false
             if (!metadata.ssaid.isNullOrBlank()) {
                 onProgress(RestoreProgress("Restoring SSAID device signature…", 0.95f, metadata.appName, pkg, RestoreSubStep.SSAID))
-                val ssaidRestored = SSAIDManager.restoreSSAID(pkg, metadata.ssaid)
+                val ssaidRestored = SSAIDManager.restoreSSAID(pkg, metadata.ssaid, newUid)
                 if (ssaidRestored) {
+                    needsReboot = true
+                }
+            }
                     needsReboot = true
                 }
             }
