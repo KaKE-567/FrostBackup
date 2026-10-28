@@ -378,9 +378,12 @@ fun RestoreScreen(
         AlertDialog(
             onDismissRequest = { showRebootDialog = false },
             icon = { Icon(Icons.Default.RestartAlt, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-            title = { Text("Reboot Recommended") },
+            title = { Text("Reboot Required for Logins") },
             text = {
-                Text("App login sessions and SSAID signatures have been restored successfully. A quick reboot ensures the Android framework registers the restored device IDs immediately.")
+                Text(
+                    "App databases, cryptographic Keystore keys, and SSAID signatures have been restored successfully.\n\n" +
+                    "⚠️ Important: Do NOT launch the restored app before rebooting! Android caches device IDs in memory and will overwrite your restored login session if opened prior to rebooting."
+                )
             },
             confirmButton = {
                 Button(

@@ -151,7 +151,7 @@ object WifiEngine {
             dataFile.writeText(networksJson)
 
             val rawBundle = File(stagingDir, "bundle.tar")
-            val tarResult = RootShell.execute("tar -cpf ${rawBundle.absolutePath} -C ${stagingDir.absolutePath} metadata.json wifi_networks.json")
+            val tarResult = RootShell.execute("tar -cf ${rawBundle.absolutePath} -C ${stagingDir.absolutePath} metadata.json wifi_networks.json")
             if (!tarResult.isSuccess) {
                 RootShell.execute("rm -rf ${stagingDir.absolutePath}")
                 return@withContext Result.failure(Exception("Failed to package Wi-Fi archive: ${tarResult.stderr}"))
@@ -191,7 +191,7 @@ object WifiEngine {
                 archiveFile
             }
 
-            val unpack = RootShell.execute("tar -xpf ${decryptedTar.absolutePath} -C ${stagingDir.absolutePath}")
+            val unpack = RootShell.execute("tar -xf ${decryptedTar.absolutePath} -C ${stagingDir.absolutePath}")
             if (!unpack.isSuccess) {
                 return@withContext Result.failure(Exception("Failed to unpack Wi-Fi backup archive"))
             }

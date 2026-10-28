@@ -327,7 +327,7 @@ object TelephonyEngine {
             // 5. Create Tar Bundle
             if (!destinationDir.exists()) destinationDir.mkdirs()
             val finalArchivePath = File(destinationDir, archiveFileName).absolutePath
-            val tarCmd = "tar -cpf \"$finalArchivePath\" -C \"${stagingDir.absolutePath}\" ."
+            val tarCmd = "tar -cf \"$finalArchivePath\" -C \"${stagingDir.absolutePath}\" ."
             val tarResult = RootShell.execute(tarCmd)
             if (!tarResult.isSuccess) {
                 throw Exception("Failed to package archive: ${tarResult.stderr}")
@@ -363,7 +363,7 @@ object TelephonyEngine {
             RootShell.execute("rm -rf \"${stagingDir.absolutePath}\" && mkdir -p \"${stagingDir.absolutePath}\"")
 
             onProgress(TelephonyProgress.Restoring(1, 4, "Unpacking telephony archive…"))
-            val unpackRes = RootShell.execute("tar -xpf \"${archiveFile.absolutePath}\" -C \"${stagingDir.absolutePath}\"")
+            val unpackRes = RootShell.execute("tar -xf \"${archiveFile.absolutePath}\" -C \"${stagingDir.absolutePath}\"")
             if (!unpackRes.isSuccess) {
                 throw Exception("Failed to unpack telephony archive: ${unpackRes.stderr}")
             }

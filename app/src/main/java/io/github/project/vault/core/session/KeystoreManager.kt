@@ -33,13 +33,14 @@ object KeystoreManager {
             "for f in .${oldUid}_*; do [ -f \"\$f\" ] && mv \"\$f\" \".${newUid}_\${f#.${oldUid}_}\"; done 2>/dev/null",
             // Rename any ${oldUid}_* files to ${newUid}_*
             "for f in ${oldUid}_*; do [ -f \"\$f\" ] && mv \"\$f\" \"${newUid}_\${f#${oldUid}_}\"; done 2>/dev/null",
-            // Copy renamed files to Keystore directory (including hidden files!)
-            "cp -p $stagingPath/.* $KEYSTORE_DIR/ 2>/dev/null",
-            "cp -p $stagingPath/* $KEYSTORE_DIR/ 2>/dev/null",
+            // Copy renamed files to Keystore directory (including hidden files, skipping . and ..)
+            "find \"$stagingPath\" -maxdepth 1 -type f -exec cp -p {} $KEYSTORE_DIR/ \\; 2>/dev/null",
             // Fix ownership, permissions, and SELinux contexts
             "chown keystore:keystore $KEYSTORE_DIR/.${newUid}_* $KEYSTORE_DIR/${newUid}_* 2>/dev/null",
             "chmod 600 $KEYSTORE_DIR/.${newUid}_* $KEYSTORE_DIR/${newUid}_* 2>/dev/null",
-            "restorecon $KEYSTORE_DIR/.${newUid}_* $KEYSTORE_DIR/${newUid}_* 2>/dev/null"
+            "restorecon $KEYSTORE_DIR/.${newUid}_* $KEYSTORE_DIR/${newUid}_* 2>/dev/null",
+            // Reload keystore / keystore2 daemon so in-memory cache picks up restored keys
+            "pkill -9 -f android.system.keystore2 2>/dev/null || pkill -9 -f keystore 2>/dev/null || true"
         )
         val result = RootShell.executeBatch(script)
         result.isSuccess

@@ -54,7 +54,8 @@ class RestoreEngine(private val context: Context) {
             // 2. Unpack archive to staging directory
             onProgress(RestoreProgress("Unpacking backup archive…", 0.25f, "", "", RestoreSubStep.UNPACKING))
             val unpackResult = RootShell.execute(
-                "tar -xpf ${effectiveArchiveFile.absolutePath} -C $stagingPath"
+                "tar -xf ${effectiveArchiveFile.absolutePath} -C $stagingPath",
+                timeoutMs = 300_000L
             )
             if (!unpackResult.isSuccess) {
                 return@withContext RestoreResult.Error("Failed to extract backup package: ${unpackResult.stderr}")
@@ -185,44 +186,57 @@ class RestoreEngine(private val context: Context) {
             val newUid = resolvedUid
 
             // 6. Stop app before restoring data
-            RootShell.execute("am force-stop $pkg")
+            RootShell.execute("am force-stop $pkg 2>/dev/null || true")
+            RootShell.execute("pkill -9 -f $pkg 2>/dev/null || true")
 
             // 7. Extract Internal Data
-            if (metadata.hasData) {
+            val hasDataTar = RootShell.execute("[ -s $stagingPath/data.tar ] && echo 1 || echo 0").stdout.trim() == "1"
+            if (metadata.hasData || hasDataTar) {
                 onProgress(RestoreProgress("Restoring internal databases & sessions…", 0.60f, metadata.appName, pkg, RestoreSubStep.USER))
-                RootShell.execute("mkdir -p /data/data/$pkg 2>/dev/null || mkdir -p /data/user/0/$pkg 2>/dev/null")
-                RootShell.execute("tar -xpf $stagingPath/data.tar -C /data/data/ 2>/dev/null || tar -xpf $stagingPath/data.tar -C /data/user/0/ 2>/dev/null")
-                onProgress(RestoreProgress("Restoring device encrypted data…", 0.70f, metadata.appName, pkg, RestoreSubStep.USER_DE))
-                RootShell.execute("mkdir -p /data/user_de/0/$pkg 2>/dev/null")
-                RootShell.execute("tar -xpf $stagingPath/de_data.tar -C /data/user_de/0/ 2>/dev/null")
+                RootShell.execute("mkdir -p /data/data/$pkg /data/user/0/$pkg 2>/dev/null")
+                RootShell.execute("rm -rf /data/data/$pkg/* /data/user/0/$pkg/* 2>/dev/null")
+                RootShell.execute(
+                    "tar -xf $stagingPath/data.tar -C /data/data/ || tar -xf $stagingPath/data.tar -C /data/user/0/",
+                    timeoutMs = 300_000L
+                )
+
+                val hasDeDataTar = RootShell.execute("[ -s $stagingPath/de_data.tar ] && echo 1 || echo 0").stdout.trim() == "1"
+                if (hasDeDataTar) {
+                    onProgress(RestoreProgress("Restoring device encrypted data…", 0.70f, metadata.appName, pkg, RestoreSubStep.USER_DE))
+                    RootShell.execute("mkdir -p /data/user_de/0/$pkg 2>/dev/null")
+                    RootShell.execute("rm -rf /data/user_de/0/$pkg/* 2>/dev/null")
+                    RootShell.execute("tar -xf $stagingPath/de_data.tar -C /data/user_de/0/", timeoutMs = 180_000L)
+                }
             }
 
             // 8. Extract External Data
-            if (metadata.hasExternalData) {
+            val hasExtTar = RootShell.execute("[ -s $stagingPath/ext_data.tar ] && echo 1 || echo 0").stdout.trim() == "1"
+            if (metadata.hasExternalData || hasExtTar) {
                 onProgress(RestoreProgress("Restoring external storage files…", 0.75f, metadata.appName, pkg, RestoreSubStep.DATA))
                 RootShell.execute("mkdir -p /sdcard/Android/data/$pkg 2>/dev/null")
-                RootShell.execute("tar -xpf $stagingPath/ext_data.tar -C /sdcard/Android/data/ 2>/dev/null")
+                RootShell.execute("tar -xf $stagingPath/ext_data.tar -C /sdcard/Android/data/", timeoutMs = 300_000L)
             }
 
             // 9. Re-map Linux UID / GID ownership & SELinux contexts
             onProgress(RestoreProgress("Applying security & SELinux contexts…", 0.85f, metadata.appName, pkg, RestoreSubStep.PERMISSIONS))
-            // Fix /data/data ownership, permissions, and SELinux
-            RootShell.execute("chown -R $newUid:$newUid /data/data/$pkg 2>/dev/null")
-            RootShell.execute("chmod -R 771 /data/data/$pkg 2>/dev/null")
-            RootShell.execute("restorecon -R /data/data/$pkg 2>/dev/null")
+            // Fix /data/data & /data/user/0 ownership, permissions, and SELinux
+            RootShell.execute("chown -R $newUid:$newUid /data/data/$pkg /data/user/0/$pkg 2>/dev/null")
+            RootShell.execute("chmod 700 /data/data/$pkg /data/user/0/$pkg 2>/dev/null")
+            RootShell.execute("restorecon -R -F -D /data/data/$pkg /data/user/0/$pkg 2>/dev/null || restorecon -R /data/data/$pkg /data/user/0/$pkg 2>/dev/null")
 
             // Fix /data/user_de/0 ownership, permissions, and SELinux (CRITICAL for Jetpack Security EncryptedSharedPreferences and auth tokens!)
             RootShell.execute("chown -R $newUid:$newUid /data/user_de/0/$pkg 2>/dev/null")
-            RootShell.execute("chmod -R 771 /data/user_de/0/$pkg 2>/dev/null")
-            RootShell.execute("restorecon -R /data/user_de/0/$pkg 2>/dev/null")
+            RootShell.execute("chmod 700 /data/user_de/0/$pkg 2>/dev/null")
+            RootShell.execute("restorecon -R -F -D /data/user_de/0/$pkg 2>/dev/null || restorecon -R /data/user_de/0/$pkg 2>/dev/null")
 
             // Fix /sdcard/Android/data SELinux
             RootShell.execute("restorecon -R /sdcard/Android/data/$pkg 2>/dev/null")
 
             // 10. Restore Keystore Encryption Tokens
-            if (metadata.hasKeystore) {
+            val keystoreStaging = File(stagingPath, "keystore")
+            val hasKeystoreFiles = RootShell.execute("[ -d $stagingPath/keystore ] && [ \"$(ls -A $stagingPath/keystore 2>/dev/null)\" ] && echo 1 || echo 0").stdout.trim() == "1"
+            if (metadata.hasKeystore || hasKeystoreFiles) {
                 onProgress(RestoreProgress("Restoring Keystore cryptographic keys…", 0.90f, metadata.appName, pkg, RestoreSubStep.KEYSTORE))
-                val keystoreStaging = File(stagingPath, "keystore")
                 KeystoreManager.restoreKeystoreForUid(metadata.originalUid, newUid, keystoreStaging)
             }
 
@@ -238,6 +252,10 @@ class RestoreEngine(private val context: Context) {
                     needsReboot = true
                 }
             }
+
+            // 13. Stop app completely so it launches fresh with restored data & keys
+            RootShell.execute("am force-stop $pkg 2>/dev/null || true")
+            RootShell.execute("pkill -9 -f $pkg 2>/dev/null || true")
 
             onProgress(RestoreProgress("Restore completed successfully!", 1.0f, metadata.appName, pkg, RestoreSubStep.DONE, isFinished = true))
             RestoreResult.Success(needsReboot)
