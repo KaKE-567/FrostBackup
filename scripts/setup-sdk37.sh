@@ -7,6 +7,15 @@ echo "Copying base platform from: $LATEST_PLATFORM"
 mkdir -p "$ANDROID_HOME/platforms/android-37"
 cp -r "$LATEST_PLATFORM"/* "$ANDROID_HOME/platforms/android-37/"
 
+# Patch copied package.xml while preserving exact schemas and type details
+if [ -f "$ANDROID_HOME/platforms/android-37/package.xml" ]; then
+  sed -i 's/path="platforms;[^"]*"/path="platforms;android-37"/' "$ANDROID_HOME/platforms/android-37/package.xml"
+  sed -i 's/platforms;android-[^<"]*/platforms;android-37/g' "$ANDROID_HOME/platforms/android-37/package.xml"
+  sed -i '/<codename>/d' "$ANDROID_HOME/platforms/android-37/package.xml"
+  sed -i 's/<api-level>[^<]*<\/api-level>/<api-level>37<\/api-level>/g' "$ANDROID_HOME/platforms/android-37/package.xml"
+  sed -i 's/<display-name>[^<]*<\/display-name>/<display-name>Android SDK Platform 37<\/display-name>/g' "$ANDROID_HOME/platforms/android-37/package.xml"
+fi
+
 # Overwrite source.properties with clean finalized SDK 37 properties
 cat << 'EOF' > "$ANDROID_HOME/platforms/android-37/source.properties"
 Pkg.Desc=Android SDK Platform 37
@@ -19,18 +28,6 @@ Layoutlib.Revision=1
 Pkg.Path=platforms;android-37
 EOF
 
-# Overwrite package.xml with clean localPackage matching platforms;android-37
-cat << 'EOF' > "$ANDROID_HOME/platforms/android-37/package.xml"
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<ns2:repository xmlns:ns2="http://schemas.android.com/repository/android/common/02" xmlns:ns5="http://schemas.android.com/sdk/android/repo/repository2/02">
-    <localPackage path="platforms;android-37" obsolete="false">
-        <type-details xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="ns5:genericDetailsType"/>
-        <revision><major>1</major></revision>
-        <display-name>Android SDK Platform 37</display-name>
-    </localPackage>
-</ns2:repository>
-EOF
-
 # Patch build.prop to reflect finalized SDK 37 (REL)
 if [ -f "$ANDROID_HOME/platforms/android-37/build.prop" ]; then
   sed -i 's/ro.build.version.sdk=.*/ro.build.version.sdk=37/' "$ANDROID_HOME/platforms/android-37/build.prop"
@@ -39,3 +36,7 @@ fi
 
 echo "Verified platforms/android-37 directory:"
 ls -la "$ANDROID_HOME/platforms/android-37/"
+if [ -f "$ANDROID_HOME/platforms/android-37/package.xml" ]; then
+  echo "--- package.xml ---"
+  cat "$ANDROID_HOME/platforms/android-37/package.xml"
+fi
