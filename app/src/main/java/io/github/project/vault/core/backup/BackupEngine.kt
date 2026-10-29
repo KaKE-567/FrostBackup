@@ -44,10 +44,11 @@ class BackupEngine(private val context: Context) {
         }
 
         try {
+            val appUid = context.applicationInfo.uid
             onProgress(BackupProgress("Freezing app process…", 0.1f, app.appName, app.packageName, BackupSubStep.PREPARING))
             RootShell.execute("am force-stop ${app.packageName}")
             RootShell.execute("mkdir -p $payloadPath/apk $payloadPath/keystore")
-            RootShell.execute("chmod -R 777 $stagingPath")
+            RootShell.execute("chown -R $appUid:$appUid $stagingPath 2>/dev/null && chmod -R 777 $stagingPath && restorecon -R -F $stagingPath 2>/dev/null")
 
             // 1. Back up APKs
             if (config.includeApk) {
@@ -62,21 +63,15 @@ class BackupEngine(private val context: Context) {
             var hasData = false
             if (config.includeInternalData) {
                 onProgress(BackupProgress("Archiving internal app data…", 0.40f, app.appName, app.packageName, BackupSubStep.USER))
-                val dataCmd = """
-                    if [ -d "/data/data/${app.packageName}" ]; then
-                        tar -cf "$payloadPath/data.tar" -C /data/data "${app.packageName}" 2>/dev/null
-                    elif [ -d "/data/user/0/${app.packageName}" ]; then
-                        tar -cf "$payloadPath/data.tar" -C /data/user/0 "${app.packageName}" 2>/dev/null
-                    fi
-                """.trimIndent()
+                val dataCmd = "tar -cf \"$payloadPath/data.tar\" -C /data/data \"${app.packageName}\" || tar -cf \"$payloadPath/data.tar\" -C /data/user/0 \"${app.packageName}\""
                 RootShell.execute(dataCmd, timeoutMs = 300_000L)
-                val dataCheck = RootShell.execute("[ -s $payloadPath/data.tar ] && echo 1 || echo 0")
+                val dataCheck = RootShell.execute("[ -s \"$payloadPath/data.tar\" ] && echo 1 || echo 0")
                 hasData = dataCheck.stdout.trim() == "1"
 
                 // Device-encrypted data
                 onProgress(BackupProgress("Archiving device encrypted data…", 0.50f, app.appName, app.packageName, BackupSubStep.USER_DE))
                 RootShell.execute(
-                    "if [ -d \"/data/user_de/0/${app.packageName}\" ]; then tar -cf \"$payloadPath/de_data.tar\" -C /data/user_de/0 \"${app.packageName}\" 2>/dev/null; fi",
+                    "if [ -d \"/data/user_de/0/${app.packageName}\" ]; then tar -cf \"$payloadPath/de_data.tar\" -C /data/user_de/0 \"${app.packageName}\"; fi",
                     timeoutMs = 180_000L
                 )
             }
@@ -86,10 +81,10 @@ class BackupEngine(private val context: Context) {
             if (config.includeExternalData) {
                 onProgress(BackupProgress("Archiving external storage data…", 0.60f, app.appName, app.packageName, BackupSubStep.DATA))
                 RootShell.execute(
-                    "if [ -d \"/sdcard/Android/data/${app.packageName}\" ]; then tar -cf \"$payloadPath/ext_data.tar\" -C /sdcard/Android/data \"${app.packageName}\" 2>/dev/null; fi",
+                    "if [ -d \"/sdcard/Android/data/${app.packageName}\" ]; then tar -cf \"$payloadPath/ext_data.tar\" -C /sdcard/Android/data \"${app.packageName}\"; fi",
                     timeoutMs = 300_000L
                 )
-                val extCheck = RootShell.execute("[ -s $payloadPath/ext_data.tar ] && echo 1 || echo 0")
+                val extCheck = RootShell.execute("[ -s \"$payloadPath/ext_data.tar\" ] && echo 1 || echo 0")
                 hasExtData = extCheck.stdout.trim() == "1"
             }
 

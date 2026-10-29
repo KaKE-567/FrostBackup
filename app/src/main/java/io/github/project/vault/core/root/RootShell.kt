@@ -1,5 +1,6 @@
 package io.github.project.vault.core.root
 
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
@@ -10,6 +11,7 @@ import java.io.File
 import java.io.InputStreamReader
 
 object RootShell {
+    private const val TAG = "RootShell"
     private var isRootedCache: Boolean? = null
 
     fun isRootAvailableSync(): Boolean? = isRootedCache
@@ -46,9 +48,10 @@ object RootShell {
                 val stderrDeferred = async(Dispatchers.IO) {
                     process.errorStream.bufferedReader().use { it.readText().trim() }
                 }
-                val exitCode = process.waitFor()
                 val stdout = stdoutDeferred.await()
                 val stderr = stderrDeferred.await()
+                val exitCode = process.waitFor()
+                Log.d(TAG, "[$exitCode] $command ${if (stderr.isNotBlank()) " | ERR: $stderr" else ""}")
                 ShellResult(exitCode, stdout, stderr)
             } catch (e: Exception) {
                 // Fallback to piping if direct su -c failed
@@ -67,11 +70,13 @@ object RootShell {
                     os.flush()
                     os.close()
 
-                    val exitCode = process.waitFor()
                     val stdout = stdoutDeferred.await()
                     val stderr = stderrDeferred.await()
+                    val exitCode = process.waitFor()
+                    Log.d(TAG, "Fallback [$exitCode] $command")
                     ShellResult(exitCode, stdout, stderr)
                 } catch (fallbackEx: Exception) {
+                    Log.e(TAG, "Execution error on: $command", fallbackEx)
                     ShellResult(-1, "", fallbackEx.message ?: e.message ?: "Execution error")
                 }
             }

@@ -2,12 +2,14 @@ package io.github.project.vault.core.session
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
+import android.util.Log
 import io.github.project.vault.core.root.RootShell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
 object KeystoreManager {
+    private const val TAG = "KeystoreManager"
     private const val KEYSTORE2_DB = "/data/misc/keystore/persistent.sqlite"
     private const val KEYSTORE_LEGACY_DIR = "/data/misc/keystore/user_0"
     private const val SQLITE_BACKUP_NAME = "keystore2.sqlite"
@@ -23,16 +25,18 @@ object KeystoreManager {
         val hasKeystore2 = RootShell.execute("[ -f $KEYSTORE2_DB ] && echo 1 || echo 0").stdout.trim() == "1"
         if (hasKeystore2) {
             val appUid = context.applicationInfo.uid
-            val tempWorkingDb = File(context.cacheDir, "keystore2_temp_${System.currentTimeMillis()}.sqlite")
+            val timestamp = System.currentTimeMillis()
+            val tempWorkingDb = File(context.cacheDir, "keystore2_temp_$timestamp.sqlite")
+            val localExportDb = File(context.cacheDir, "keystore2_export_$timestamp.sqlite")
             val targetDb = File(targetStagingDir, SQLITE_BACKUP_NAME)
 
             try {
-                // Copy persistent.sqlite to app cache with app ownership
-                RootShell.execute(
-                    "cp -p $KEYSTORE2_DB ${tempWorkingDb.absolutePath} && " +
-                    "chown $appUid:$appUid ${tempWorkingDb.absolutePath} && " +
-                    "chmod 600 ${tempWorkingDb.absolutePath}"
-                )
+                // Copy persistent.sqlite to app cache with app ownership and SELinux label
+                val copyCmd = "cp -p $KEYSTORE2_DB ${tempWorkingDb.absolutePath} && " +
+                        "chown $appUid:$appUid ${tempWorkingDb.absolutePath} && " +
+                        "chmod 600 ${tempWorkingDb.absolutePath} && " +
+                        "restorecon -F ${tempWorkingDb.absolutePath}"
+                RootShell.execute(copyCmd)
 
                 if (tempWorkingDb.exists() && tempWorkingDb.length() > 0) {
                     var db: SQLiteDatabase? = null
@@ -46,27 +50,37 @@ object KeystoreManager {
                                 count = cursor.getInt(0)
                             }
                         }
+                        Log.d(TAG, "Keystore 2.0: namespace $uid has $count key(s)")
 
                         if (count > 0) {
-                            if (targetDb.exists()) targetDb.delete()
-                            db.execSQL("ATTACH DATABASE '${targetDb.absolutePath}' AS backup_db")
+                            if (localExportDb.exists()) localExportDb.delete()
+                            db.execSQL("ATTACH DATABASE '${localExportDb.absolutePath}' AS backup_db")
                             db.execSQL("CREATE TABLE backup_db.keyentry AS SELECT * FROM keyentry WHERE namespace = $uid")
                             db.execSQL("CREATE TABLE backup_db.blobentry AS SELECT * FROM blobentry WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $uid)")
                             db.execSQL("CREATE TABLE backup_db.keyparameter AS SELECT * FROM keyparameter WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $uid)")
                             db.execSQL("CREATE TABLE backup_db.keymetadata AS SELECT * FROM keymetadata WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $uid)")
                             db.execSQL("CREATE TABLE backup_db.grant AS SELECT * FROM grant WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $uid)")
                             db.execSQL("DETACH DATABASE backup_db")
+
+                            // Move exported database to target staging directory via root
+                            RootShell.execute(
+                                "mkdir -p ${targetStagingDir.absolutePath} && " +
+                                "cp ${localExportDb.absolutePath} ${targetDb.absolutePath} && " +
+                                "chmod 644 ${targetDb.absolutePath}"
+                            )
                             backedUpAny = true
+                            Log.d(TAG, "Successfully backed up Keystore 2.0 keys for UID $uid")
                         }
                     } catch (e: Exception) {
-                        e.printStackTrace()
+                        Log.e(TAG, "Error querying/backing up Keystore 2.0: ${e.message}", e)
                     } finally {
                         db?.close()
                     }
                 }
             } finally {
                 tempWorkingDb.delete()
-                RootShell.execute("rm -f ${tempWorkingDb.absolutePath}*")
+                localExportDb.delete()
+                RootShell.execute("rm -f ${tempWorkingDb.absolutePath}* ${localExportDb.absolutePath}*")
             }
         }
 
@@ -80,6 +94,7 @@ object KeystoreManager {
             val result = RootShell.executeBatch(script)
             if (result.isSuccess && result.stdout.isNotBlank()) {
                 backedUpAny = true
+                Log.d(TAG, "Successfully backed up legacy Keystore files for UID $uid")
             }
         }
 
@@ -96,23 +111,30 @@ object KeystoreManager {
         val hasKeystore2 = RootShell.execute("[ -f $KEYSTORE2_DB ] && echo 1 || echo 0").stdout.trim() == "1"
         if (hasKeystore2 && backupDb.exists() && backupDb.length() > 0) {
             val appUid = context.applicationInfo.uid
-            val tempWorkingDb = File(context.cacheDir, "keystore2_restore_${System.currentTimeMillis()}.sqlite")
+            val timestamp = System.currentTimeMillis()
+            val tempWorkingDb = File(context.cacheDir, "keystore2_restore_work_$timestamp.sqlite")
+            val localImportDb = File(context.cacheDir, "keystore2_restore_import_$timestamp.sqlite")
 
             try {
-                // Copy current persistent.sqlite to app cache
+                // Copy current persistent.sqlite AND backupDb to app cache with app ownership and SELinux label
                 RootShell.execute(
                     "cp -p $KEYSTORE2_DB ${tempWorkingDb.absolutePath} && " +
                     "chown $appUid:$appUid ${tempWorkingDb.absolutePath} && " +
-                    "chmod 600 ${tempWorkingDb.absolutePath}"
+                    "chmod 600 ${tempWorkingDb.absolutePath} && " +
+                    "restorecon -F ${tempWorkingDb.absolutePath} && " +
+                    "cp ${backupDb.absolutePath} ${localImportDb.absolutePath} && " +
+                    "chown $appUid:$appUid ${localImportDb.absolutePath} && " +
+                    "chmod 600 ${localImportDb.absolutePath} && " +
+                    "restorecon -F ${localImportDb.absolutePath}"
                 )
 
-                if (tempWorkingDb.exists() && tempWorkingDb.length() > 0) {
+                if (tempWorkingDb.exists() && tempWorkingDb.length() > 0 && localImportDb.exists() && localImportDb.length() > 0) {
                     var db: SQLiteDatabase? = null
                     try {
                         db = SQLiteDatabase.openDatabase(tempWorkingDb.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
                         db.beginTransaction()
                         try {
-                            db.execSQL("ATTACH DATABASE '${backupDb.absolutePath}' AS backup_db")
+                            db.execSQL("ATTACH DATABASE '${localImportDb.absolutePath}' AS backup_db")
 
                             // Delete any old keyentries for this newUid to avoid collisions
                             db.execSQL("DELETE FROM blobentry WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $newUid)")
@@ -134,11 +156,12 @@ object KeystoreManager {
                             db.execSQL("DETACH DATABASE backup_db")
                             db.setTransactionSuccessful()
                             restoredAny = true
+                            Log.d(TAG, "Successfully remapped and restored Keystore 2.0 keys from $oldUid to $newUid")
                         } finally {
                             db.endTransaction()
                         }
                     } catch (e: Exception) {
-                        e.printStackTrace()
+                        Log.e(TAG, "Error restoring Keystore 2.0 database: ${e.message}", e)
                     } finally {
                         db?.close()
                     }
@@ -157,7 +180,8 @@ object KeystoreManager {
                 }
             } finally {
                 tempWorkingDb.delete()
-                RootShell.execute("rm -f ${tempWorkingDb.absolutePath}*")
+                localImportDb.delete()
+                RootShell.execute("rm -f ${tempWorkingDb.absolutePath}* ${localImportDb.absolutePath}*")
             }
         }
 
