@@ -128,7 +128,7 @@ class BackupEngine(private val context: Context) {
                 appName = app.appName,
                 versionName = app.versionName,
                 versionCode = app.versionCode,
-                targetSdk = 37,
+                targetSdk = 35,
                 originalUid = app.uid,
                 backupTimestamp = timestamp,
                 isEncrypted = config.encrypt,

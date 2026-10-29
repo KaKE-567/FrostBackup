@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace = "io.github.project.vault"
-    compileSdk = 37
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "io.github.project.vault"
         minSdk = 26
-        targetSdk = 37
+        targetSdk = 35
         versionCode = 5
         versionName = "1.0.4"
 
@@ -69,8 +69,11 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        dex {
+            useLegacyPackaging = false
+        }
         jniLibs {
-            useLegacyPackaging = true
+            useLegacyPackaging = false
         }
     }
 }

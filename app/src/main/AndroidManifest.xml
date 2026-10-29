@@ -37,7 +37,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.AppVault"
-        tools:targetApi="37">
+        tools:targetApi="35">
 
         <activity
             android:name=".ui.MainActivity"
