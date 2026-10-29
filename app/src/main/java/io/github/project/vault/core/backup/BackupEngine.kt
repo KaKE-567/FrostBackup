@@ -63,8 +63,9 @@ class BackupEngine(private val context: Context) {
             var hasData = false
             if (config.includeInternalData) {
                 onProgress(BackupProgress("Archiving internal app data…", 0.40f, app.appName, app.packageName, BackupSubStep.USER))
-                val srcDir = if (RootShell.execute("[ -d /data/user/0/${app.packageName} ] && echo 1 || echo 0").stdout.trim() == "1") "/data/user/0" else "/data/data"
-                val dataCmd = "tar -cpf \"$payloadPath/data.tar\" -C $srcDir --exclude=\"${app.packageName}/cache\" --exclude=\"${app.packageName}/code_cache\" --exclude=\"${app.packageName}/lib\" \"${app.packageName}\""
+                val srcDir = if (RootShell.execute("[ -d /data/user/0 ]").isSuccess) "/data/user/0" else "/data/data"
+                val actualSrc = if (RootShell.execute("[ -d \"$srcDir/${app.packageName}\" ]").isSuccess) srcDir else "/data/data"
+                val dataCmd = "tar -cpf \"$payloadPath/data.tar\" -C $actualSrc --exclude=\"${app.packageName}/cache\" --exclude=\"${app.packageName}/code_cache\" --exclude=\"${app.packageName}/lib\" \"${app.packageName}\""
                 RootShell.execute(dataCmd, timeoutMs = 300_000L)
                 val dataCheck = RootShell.execute("[ \$(stat -c %s \"$payloadPath/data.tar\" 2>/dev/null || wc -c < \"$payloadPath/data.tar\" || echo 0) -gt 2048 ] && echo 1 || echo 0")
                 hasData = dataCheck.stdout.trim() == "1"
