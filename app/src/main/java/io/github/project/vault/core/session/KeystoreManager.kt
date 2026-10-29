@@ -225,6 +225,7 @@ object KeystoreManager {
 
     suspend fun restoreKeystoreForUid(context: Context, oldUid: Int, newUid: Int, sourceStagingDir: File): Boolean = withContext(Dispatchers.IO) {
         if (newUid <= 0 || !sourceStagingDir.exists()) return@withContext false
+        val stagingPath = sourceStagingDir.absolutePath
         var restoredAny = false
 
         // 1. Keystore 2.0 Restore
