@@ -57,6 +57,7 @@ object KeystoreManager {
                             db.execSQL("ATTACH DATABASE '${localExportDb.absolutePath}' AS backup_db")
                             db.execSQL("CREATE TABLE backup_db.keyentry AS SELECT * FROM keyentry WHERE namespace = $uid")
                             db.execSQL("CREATE TABLE backup_db.blobentry AS SELECT * FROM blobentry WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $uid)")
+                            db.execSQL("CREATE TABLE backup_db.blobmetadata AS SELECT * FROM blobmetadata WHERE blobentryid IN (SELECT id FROM backup_db.blobentry)")
                             db.execSQL("CREATE TABLE backup_db.keyparameter AS SELECT * FROM keyparameter WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $uid)")
                             db.execSQL("CREATE TABLE backup_db.keymetadata AS SELECT * FROM keymetadata WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $uid)")
                             db.execSQL("CREATE TABLE backup_db.grant AS SELECT * FROM grant WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $uid)")
@@ -136,12 +137,53 @@ object KeystoreManager {
                         try {
                             db.execSQL("ATTACH DATABASE '${localImportDb.absolutePath}' AS backup_db")
 
+                            // Check if backup database contains blobmetadata table
+                            var hasBlobMetadata = false
+                            db.rawQuery("SELECT name FROM backup_db.sqlite_master WHERE type='table' AND name='blobmetadata'", null).use { cursor ->
+                                hasBlobMetadata = cursor.count > 0
+                            }
+
                             // Delete any old keyentries for this newUid to avoid collisions
+                            if (hasBlobMetadata) {
+                                db.execSQL("DELETE FROM blobmetadata WHERE blobentryid IN (SELECT id FROM blobentry WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $newUid))")
+                            }
                             db.execSQL("DELETE FROM blobentry WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $newUid)")
                             db.execSQL("DELETE FROM keyparameter WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $newUid)")
                             db.execSQL("DELETE FROM keymetadata WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $newUid)")
                             db.execSQL("DELETE FROM grant WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $newUid)")
                             db.execSQL("DELETE FROM keyentry WHERE namespace = $newUid")
+
+                            // Check if backup keys collide with any existing keys in persistent.sqlite for OTHER apps
+                            var keyCollisions = 0
+                            db.rawQuery("SELECT count(*) FROM keyentry WHERE id IN (SELECT id FROM backup_db.keyentry)", null).use { cursor ->
+                                if (cursor.moveToFirst()) keyCollisions = cursor.getInt(0)
+                            }
+                            if (keyCollisions > 0) {
+                                var maxKeyId = 0L
+                                db.rawQuery("SELECT COALESCE(MAX(abs(id)), 0) FROM keyentry", null).use { cursor ->
+                                    if (cursor.moveToFirst()) maxKeyId = cursor.getLong(0)
+                                }
+                                var maxBlobId = 0L
+                                db.rawQuery("SELECT COALESCE(MAX(abs(id)), 0) FROM blobentry", null).use { cursor ->
+                                    if (cursor.moveToFirst()) maxBlobId = cursor.getLong(0)
+                                }
+                                val keyOffset = maxKeyId + 1000L
+                                val blobOffset = maxBlobId + 1000L
+
+                                if (hasBlobMetadata) {
+                                    var maxBlobMetaId = 0L
+                                    db.rawQuery("SELECT COALESCE(MAX(abs(id)), 0) FROM blobmetadata", null).use { cursor ->
+                                        if (cursor.moveToFirst()) maxBlobMetaId = cursor.getLong(0)
+                                    }
+                                    val blobMetaOffset = maxBlobMetaId + 1000L
+                                    db.execSQL("UPDATE backup_db.blobmetadata SET blobentryid = blobentryid + $blobOffset, id = id + $blobMetaOffset")
+                                }
+                                db.execSQL("UPDATE backup_db.blobentry SET keyentryid = keyentryid + $keyOffset, id = id + $blobOffset")
+                                db.execSQL("UPDATE backup_db.keyparameter SET keyentryid = keyentryid + $keyOffset")
+                                db.execSQL("UPDATE backup_db.keymetadata SET keyentryid = keyentryid + $keyOffset")
+                                db.execSQL("UPDATE backup_db.grant SET keyentryid = keyentryid + $keyOffset")
+                                db.execSQL("UPDATE backup_db.keyentry SET id = id + $keyOffset")
+                            }
 
                             // Insert restored keys with remap to newUid
                             db.execSQL(
@@ -149,6 +191,9 @@ object KeystoreManager {
                                 "SELECT id, key_type, domain, $newUid, alias, state, km_uuid FROM backup_db.keyentry"
                             )
                             db.execSQL("INSERT OR REPLACE INTO blobentry SELECT * FROM backup_db.blobentry")
+                            if (hasBlobMetadata) {
+                                db.execSQL("INSERT OR REPLACE INTO blobmetadata SELECT * FROM backup_db.blobmetadata")
+                            }
                             db.execSQL("INSERT OR REPLACE INTO keyparameter SELECT * FROM backup_db.keyparameter")
                             db.execSQL("INSERT OR REPLACE INTO keymetadata SELECT * FROM backup_db.keymetadata")
                             db.execSQL("INSERT OR REPLACE INTO grant SELECT * FROM backup_db.grant")

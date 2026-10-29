@@ -189,48 +189,63 @@ class RestoreEngine(private val context: Context) {
             RootShell.execute("am force-stop $pkg 2>/dev/null || true")
             RootShell.execute("pkill -9 -f $pkg 2>/dev/null || true")
 
+            // Capture the dynamic SELinux context assigned to this package by installd before altering data
+            var appCtx = RootShell.execute("ls -Zd /data/user/0/$pkg 2>/dev/null | awk '{print \$1}'").stdout.trim()
+            if (appCtx.isBlank() || !appCtx.startsWith("u:object_r:")) {
+                appCtx = RootShell.execute("ls -Zd /data/user_de/0/$pkg 2>/dev/null | awk '{print \$1}'").stdout.trim()
+            }
+            if (appCtx.isBlank() || !appCtx.startsWith("u:object_r:")) {
+                val parentCtx = RootShell.execute("ls -Zd /data/user/0 2>/dev/null | awk '{print \$1}'").stdout.trim()
+                if (parentCtx.isNotBlank()) {
+                    appCtx = parentCtx.replace("system_data_file", "app_data_file")
+                }
+            }
+
             // 7. Extract Internal Data
-            val hasDataTar = RootShell.execute("[ -s $stagingPath/data.tar ] && echo 1 || echo 0").stdout.trim() == "1"
+            val hasDataTar = RootShell.execute("[ -f $stagingPath/data.tar ] && [ \$(stat -c %s $stagingPath/data.tar 2>/dev/null || echo 0) -gt 2048 ] && echo 1 || echo 0").stdout.trim() == "1"
             if (metadata.hasData || hasDataTar) {
                 onProgress(RestoreProgress("Restoring internal databases & sessions…", 0.60f, metadata.appName, pkg, RestoreSubStep.USER))
-                RootShell.execute("mkdir -p /data/data/$pkg /data/user/0/$pkg 2>/dev/null")
-                RootShell.execute("rm -rf /data/data/$pkg/* /data/user/0/$pkg/* 2>/dev/null")
+                RootShell.execute("mkdir -p /data/user/0/$pkg /data/data/$pkg 2>/dev/null")
+                RootShell.execute("find /data/user/0/$pkg -mindepth 1 -delete 2>/dev/null || rm -rf /data/user/0/$pkg/* /data/data/$pkg/* 2>/dev/null")
+                val dstDir = if (RootShell.execute("[ -d /data/user/0 ] && echo 1 || echo 0").stdout.trim() == "1") "/data/user/0" else "/data/data"
                 RootShell.execute(
-                    "tar -xf $stagingPath/data.tar -C /data/data/ || tar -xf $stagingPath/data.tar -C /data/user/0/",
+                    "tar -xpf $stagingPath/data.tar -C $dstDir/",
                     timeoutMs = 300_000L
                 )
 
-                val hasDeDataTar = RootShell.execute("[ -s $stagingPath/de_data.tar ] && echo 1 || echo 0").stdout.trim() == "1"
+                val hasDeDataTar = RootShell.execute("[ -f $stagingPath/de_data.tar ] && [ \$(stat -c %s $stagingPath/de_data.tar 2>/dev/null || echo 0) -gt 2048 ] && echo 1 || echo 0").stdout.trim() == "1"
                 if (hasDeDataTar) {
                     onProgress(RestoreProgress("Restoring device encrypted data…", 0.70f, metadata.appName, pkg, RestoreSubStep.USER_DE))
                     RootShell.execute("mkdir -p /data/user_de/0/$pkg 2>/dev/null")
-                    RootShell.execute("rm -rf /data/user_de/0/$pkg/* 2>/dev/null")
-                    RootShell.execute("tar -xf $stagingPath/de_data.tar -C /data/user_de/0/", timeoutMs = 180_000L)
+                    RootShell.execute("find /data/user_de/0/$pkg -mindepth 1 -delete 2>/dev/null || rm -rf /data/user_de/0/$pkg/* 2>/dev/null")
+                    RootShell.execute("tar -xpf $stagingPath/de_data.tar -C /data/user_de/0/", timeoutMs = 180_000L)
                 }
             }
 
             // 8. Extract External Data
-            val hasExtTar = RootShell.execute("[ -s $stagingPath/ext_data.tar ] && echo 1 || echo 0").stdout.trim() == "1"
+            val hasExtTar = RootShell.execute("[ -f $stagingPath/ext_data.tar ] && [ \$(stat -c %s $stagingPath/ext_data.tar 2>/dev/null || echo 0) -gt 2048 ] && echo 1 || echo 0").stdout.trim() == "1"
             if (metadata.hasExternalData || hasExtTar) {
                 onProgress(RestoreProgress("Restoring external storage files…", 0.75f, metadata.appName, pkg, RestoreSubStep.DATA))
-                RootShell.execute("mkdir -p /sdcard/Android/data/$pkg 2>/dev/null")
-                RootShell.execute("tar -xf $stagingPath/ext_data.tar -C /sdcard/Android/data/", timeoutMs = 300_000L)
+                RootShell.execute("mkdir -p /storage/emulated/0/Android/data/$pkg 2>/dev/null")
+                RootShell.execute("find /storage/emulated/0/Android/data/$pkg -mindepth 1 -delete 2>/dev/null || true")
+                RootShell.execute("tar -xpf $stagingPath/ext_data.tar -C /storage/emulated/0/Android/data/", timeoutMs = 300_000L)
             }
 
             // 9. Re-map Linux UID / GID ownership & SELinux contexts
             onProgress(RestoreProgress("Applying security & SELinux contexts…", 0.85f, metadata.appName, pkg, RestoreSubStep.PERMISSIONS))
-            // Fix /data/data & /data/user/0 ownership, permissions, and SELinux
-            RootShell.execute("chown -R $newUid:$newUid /data/data/$pkg /data/user/0/$pkg 2>/dev/null")
-            RootShell.execute("chmod 700 /data/data/$pkg /data/user/0/$pkg 2>/dev/null")
-            RootShell.execute("restorecon -R -F -D /data/data/$pkg /data/user/0/$pkg 2>/dev/null || restorecon -R /data/data/$pkg /data/user/0/$pkg 2>/dev/null")
+            // Fix /data/user/0, /data/user_de/0 & /data/data ownership and permissions
+            RootShell.execute("chown -hR $newUid:$newUid /data/user/0/$pkg /data/user_de/0/$pkg /data/data/$pkg 2>/dev/null")
+            RootShell.execute("chmod 700 /data/user/0/$pkg /data/user_de/0/$pkg 2>/dev/null")
 
-            // Fix /data/user_de/0 ownership, permissions, and SELinux (CRITICAL for Jetpack Security EncryptedSharedPreferences and auth tokens!)
-            RootShell.execute("chown -R $newUid:$newUid /data/user_de/0/$pkg 2>/dev/null")
-            RootShell.execute("chmod 700 /data/user_de/0/$pkg 2>/dev/null")
-            RootShell.execute("restorecon -R -F -D /data/user_de/0/$pkg 2>/dev/null || restorecon -R /data/user_de/0/$pkg 2>/dev/null")
+            // CRITICAL: Apply preserved dynamic SELinux context recursively instead of restorecon!
+            // restorecon strips dynamic MCS categories (e.g. c159,c257,c512,c768), which blocks untrusted_app domain from reading data on Android 12-17!
+            if (appCtx.isNotBlank() && appCtx.startsWith("u:object_r:")) {
+                RootShell.execute("chcon -hR $appCtx /data/user/0/$pkg /data/user_de/0/$pkg /data/data/$pkg 2>/dev/null")
+            }
 
-            // Fix /sdcard/Android/data SELinux
-            RootShell.execute("restorecon -R /sdcard/Android/data/$pkg 2>/dev/null")
+            // Fix /storage/emulated/0/Android/data ownership and SELinux
+            RootShell.execute("chown -hR $newUid:ext_data_rw /storage/emulated/0/Android/data/$pkg /sdcard/Android/data/$pkg 2>/dev/null || chown -hR $newUid:9997 /storage/emulated/0/Android/data/$pkg /sdcard/Android/data/$pkg 2>/dev/null")
+            RootShell.execute("chcon -hR u:object_r:media_rw_data_file:s0 /storage/emulated/0/Android/data/$pkg /sdcard/Android/data/$pkg 2>/dev/null")
 
             // 10. Restore Keystore Encryption Tokens
             val keystoreStaging = File(stagingPath, "keystore")
