@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace = "io.github.project.vault"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "io.github.project.vault"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 37
         versionCode = 5
         versionName = "1.0.4"
 

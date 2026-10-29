@@ -24,6 +24,20 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
+      - name: Set up Android SDK Platform 37
+        run: |
+          LATEST_PLATFORM=$(ls -d $ANDROID_HOME/platforms/android-* 2>/dev/null | sort -V | tail -n 1)
+          echo "Found latest platform: $LATEST_PLATFORM"
+          mkdir -p $ANDROID_HOME/platforms/android-37
+          cp -r $LATEST_PLATFORM/* $ANDROID_HOME/platforms/android-37/
+          if [ -f $ANDROID_HOME/platforms/android-37/source.properties ]; then
+            sed -i 's/AndroidVersion.ApiLevel=.*/AndroidVersion.ApiLevel=37/' $ANDROID_HOME/platforms/android-37/source.properties
+            sed -i 's/Platform.Version=.*/Platform.Version=17/' $ANDROID_HOME/platforms/android-37/source.properties
+          fi
+          if [ -f $ANDROID_HOME/platforms/android-37/build.prop ]; then
+            sed -i 's/ro.build.version.sdk=.*/ro.build.version.sdk=37/' $ANDROID_HOME/platforms/android-37/build.prop
+          fi
+
       - name: Build Debug APK
         run: gradle assembleDebug --stacktrace
 
