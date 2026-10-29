@@ -1,6 +1,7 @@
 package io.github.project.vault.core.session
 
 import android.content.Context
+import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 import io.github.project.vault.core.root.RootShell
@@ -14,6 +15,85 @@ object KeystoreManager {
     private const val KEYSTORE_LEGACY_DIR = "/data/misc/keystore/user_0"
     private const val SQLITE_BACKUP_NAME = "keystore2.sqlite"
 
+    private fun tableExists(db: SQLiteDatabase, tableName: String): Boolean {
+        return try {
+            db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name=?", arrayOf(tableName)).use { cursor ->
+                cursor.count > 0
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun copyTable(
+        sourceDb: SQLiteDatabase,
+        targetDb: SQLiteDatabase,
+        tableName: String,
+        createTableSql: String,
+        selectQuery: String,
+        selectionArgs: Array<String>? = null
+    ) {
+        if (createTableSql.isNotBlank()) {
+            targetDb.execSQL(createTableSql)
+        }
+        if (!tableExists(sourceDb, tableName)) return
+        sourceDb.rawQuery(selectQuery, selectionArgs).use { cursor ->
+            val columnNames = cursor.columnNames
+            val placeholders = columnNames.map { "?" }.joinToString(",")
+            val insertSql = "INSERT OR REPLACE INTO $tableName (${columnNames.joinToString(",")}) VALUES ($placeholders)"
+            val stmt = targetDb.compileStatement(insertSql)
+            while (cursor.moveToNext()) {
+                stmt.clearBindings()
+                for (i in columnNames.indices) {
+                    when (cursor.getType(i)) {
+                        Cursor.FIELD_TYPE_NULL -> stmt.bindNull(i + 1)
+                        Cursor.FIELD_TYPE_INTEGER -> stmt.bindLong(i + 1, cursor.getLong(i))
+                        Cursor.FIELD_TYPE_FLOAT -> stmt.bindDouble(i + 1, cursor.getDouble(i))
+                        Cursor.FIELD_TYPE_STRING -> stmt.bindString(i + 1, cursor.getString(i))
+                        Cursor.FIELD_TYPE_BLOB -> stmt.bindBlob(i + 1, cursor.getBlob(i))
+                    }
+                }
+                stmt.executeInsert()
+            }
+        }
+    }
+
+    private fun copyTableWithRemap(
+        sourceDb: SQLiteDatabase,
+        targetDb: SQLiteDatabase,
+        tableName: String,
+        selectQuery: String,
+        remapColumn: String,
+        remapValue: Long
+    ) {
+        if (!tableExists(sourceDb, tableName)) return
+        sourceDb.rawQuery(selectQuery, null).use { cursor ->
+            val columnNames = cursor.columnNames
+            val placeholders = columnNames.map { "?" }.joinToString(",")
+            val insertSql = "INSERT OR REPLACE INTO $tableName (${columnNames.joinToString(",")}) VALUES ($placeholders)"
+            val stmt = targetDb.compileStatement(insertSql)
+            val remapIndex = columnNames.indexOf(remapColumn)
+
+            while (cursor.moveToNext()) {
+                stmt.clearBindings()
+                for (i in columnNames.indices) {
+                    if (i == remapIndex) {
+                        stmt.bindLong(i + 1, remapValue)
+                    } else {
+                        when (cursor.getType(i)) {
+                            Cursor.FIELD_TYPE_NULL -> stmt.bindNull(i + 1)
+                            Cursor.FIELD_TYPE_INTEGER -> stmt.bindLong(i + 1, cursor.getLong(i))
+                            Cursor.FIELD_TYPE_FLOAT -> stmt.bindDouble(i + 1, cursor.getDouble(i))
+                            Cursor.FIELD_TYPE_STRING -> stmt.bindString(i + 1, cursor.getString(i))
+                            Cursor.FIELD_TYPE_BLOB -> stmt.bindBlob(i + 1, cursor.getBlob(i))
+                        }
+                    }
+                }
+                stmt.executeInsert()
+            }
+        }
+    }
+
     suspend fun backupKeystoreForUid(context: Context, uid: Int, targetStagingDir: File): Boolean = withContext(Dispatchers.IO) {
         if (uid <= 0) return@withContext false
         val stagingPath = targetStagingDir.absolutePath
@@ -25,27 +105,28 @@ object KeystoreManager {
         val hasKeystore2 = RootShell.execute("[ -f $KEYSTORE2_DB ] && echo 1 || echo 0").stdout.trim() == "1"
         if (hasKeystore2) {
             val appUid = context.applicationInfo.uid
+            val appCtx = RootShell.execute("ls -Zd ${context.cacheDir.absolutePath} 2>/dev/null | awk '{print \$1}'").stdout.trim()
             val timestamp = System.currentTimeMillis()
             val tempWorkingDb = File(context.cacheDir, "keystore2_temp_$timestamp.sqlite")
             val localExportDb = File(context.cacheDir, "keystore2_export_$timestamp.sqlite")
             val targetDb = File(targetStagingDir, SQLITE_BACKUP_NAME)
 
             try {
-                // Copy persistent.sqlite to app cache with app ownership and SELinux label
+                val chconPart = if (appCtx.isNotBlank() && appCtx.startsWith("u:object_r:")) " && chcon $appCtx ${tempWorkingDb.absolutePath}" else ""
                 val copyCmd = "cp -p $KEYSTORE2_DB ${tempWorkingDb.absolutePath} && " +
                         "chown $appUid:$appUid ${tempWorkingDb.absolutePath} && " +
-                        "chmod 600 ${tempWorkingDb.absolutePath} && " +
-                        "restorecon -F ${tempWorkingDb.absolutePath}"
+                        "chmod 600 ${tempWorkingDb.absolutePath}$chconPart"
                 RootShell.execute(copyCmd)
 
                 if (tempWorkingDb.exists() && tempWorkingDb.length() > 0) {
-                    var db: SQLiteDatabase? = null
+                    var sourceDb: SQLiteDatabase? = null
+                    var exportDb: SQLiteDatabase? = null
                     try {
-                        db = SQLiteDatabase.openDatabase(tempWorkingDb.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
+                        sourceDb = SQLiteDatabase.openDatabase(tempWorkingDb.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
 
                         // Check if this UID has any keys
                         var count = 0
-                        db.rawQuery("SELECT count(*) FROM keyentry WHERE namespace = ?", arrayOf(uid.toString())).use { cursor ->
+                        sourceDb.rawQuery("SELECT count(*) FROM keyentry WHERE namespace = ?", arrayOf(uid.toString())).use { cursor ->
                             if (cursor.moveToFirst()) {
                                 count = cursor.getInt(0)
                             }
@@ -54,14 +135,53 @@ object KeystoreManager {
 
                         if (count > 0) {
                             if (localExportDb.exists()) localExportDb.delete()
-                            db.execSQL("ATTACH DATABASE '${localExportDb.absolutePath}' AS backup_db")
-                            db.execSQL("CREATE TABLE backup_db.keyentry AS SELECT * FROM keyentry WHERE namespace = $uid")
-                            db.execSQL("CREATE TABLE backup_db.blobentry AS SELECT * FROM blobentry WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $uid)")
-                            db.execSQL("CREATE TABLE backup_db.blobmetadata AS SELECT * FROM blobmetadata WHERE blobentryid IN (SELECT id FROM backup_db.blobentry)")
-                            db.execSQL("CREATE TABLE backup_db.keyparameter AS SELECT * FROM keyparameter WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $uid)")
-                            db.execSQL("CREATE TABLE backup_db.keymetadata AS SELECT * FROM keymetadata WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $uid)")
-                            db.execSQL("CREATE TABLE backup_db.grant AS SELECT * FROM grant WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $uid)")
-                            db.execSQL("DETACH DATABASE backup_db")
+                            exportDb = SQLiteDatabase.openOrCreateDatabase(localExportDb, null)
+                            exportDb.beginTransaction()
+                            try {
+                                copyTable(
+                                    sourceDb, exportDb, "keyentry",
+                                    "CREATE TABLE IF NOT EXISTS keyentry (id INTEGER UNIQUE, key_type INTEGER, domain INTEGER, namespace INTEGER, alias BLOB, state INTEGER, km_uuid BLOB)",
+                                    "SELECT * FROM keyentry WHERE namespace = ?",
+                                    arrayOf(uid.toString())
+                                )
+                                copyTable(
+                                    sourceDb, exportDb, "blobentry",
+                                    "CREATE TABLE IF NOT EXISTS blobentry (id INTEGER PRIMARY KEY, subcomponent_type INTEGER, keyentryid INTEGER, blob BLOB, state INTEGER DEFAULT 0)",
+                                    "SELECT * FROM blobentry WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = ?)",
+                                    arrayOf(uid.toString())
+                                )
+                                if (tableExists(sourceDb, "blobmetadata")) {
+                                    copyTable(
+                                        sourceDb, exportDb, "blobmetadata",
+                                        "CREATE TABLE IF NOT EXISTS blobmetadata (id INTEGER PRIMARY KEY, blobentryid INTEGER, tag INTEGER, data ANY, UNIQUE (blobentryid, tag))",
+                                        "SELECT * FROM blobmetadata WHERE blobentryid IN (SELECT id FROM blobentry WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = ?))",
+                                        arrayOf(uid.toString())
+                                    )
+                                }
+                                copyTable(
+                                    sourceDb, exportDb, "keyparameter",
+                                    "CREATE TABLE IF NOT EXISTS keyparameter (keyentryid INTEGER, tag INTEGER, data ANY, security_level INTEGER)",
+                                    "SELECT * FROM keyparameter WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = ?)",
+                                    arrayOf(uid.toString())
+                                )
+                                copyTable(
+                                    sourceDb, exportDb, "keymetadata",
+                                    "CREATE TABLE IF NOT EXISTS keymetadata (keyentryid INTEGER, tag INTEGER, data ANY, UNIQUE (keyentryid, tag))",
+                                    "SELECT * FROM keymetadata WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = ?)",
+                                    arrayOf(uid.toString())
+                                )
+                                copyTable(
+                                    sourceDb, exportDb, "grant",
+                                    "CREATE TABLE IF NOT EXISTS grant (id INTEGER UNIQUE, grantee INTEGER, keyentryid INTEGER, access_vector INTEGER)",
+                                    "SELECT * FROM grant WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = ?)",
+                                    arrayOf(uid.toString())
+                                )
+                                exportDb.setTransactionSuccessful()
+                            } finally {
+                                exportDb.endTransaction()
+                            }
+                            exportDb.close()
+                            exportDb = null
 
                             // Move exported database to target staging directory via root
                             RootShell.execute(
@@ -69,13 +189,14 @@ object KeystoreManager {
                                 "cp ${localExportDb.absolutePath} ${targetDb.absolutePath} && " +
                                 "chmod 644 ${targetDb.absolutePath}"
                             )
-                            backedUpAny = true
-                            Log.d(TAG, "Successfully backed up Keystore 2.0 keys for UID $uid")
+                            backedUpAny = targetDb.exists() && targetDb.length() > 0
+                            Log.d(TAG, "Successfully backed up Keystore 2.0 keys for UID $uid (${targetDb.length()} bytes)")
                         }
                     } catch (e: Exception) {
                         Log.e(TAG, "Error querying/backing up Keystore 2.0: ${e.message}", e)
                     } finally {
-                        db?.close()
+                        exportDb?.close()
+                        sourceDb?.close()
                     }
                 }
             } finally {
@@ -103,112 +224,125 @@ object KeystoreManager {
     }
 
     suspend fun restoreKeystoreForUid(context: Context, oldUid: Int, newUid: Int, sourceStagingDir: File): Boolean = withContext(Dispatchers.IO) {
-        if (oldUid <= 0 || newUid <= 0 || !sourceStagingDir.exists()) return@withContext false
-        val stagingPath = sourceStagingDir.absolutePath
+        if (newUid <= 0 || !sourceStagingDir.exists()) return@withContext false
         var restoredAny = false
 
         // 1. Keystore 2.0 Restore
-        val backupDb = File(sourceStagingDir, SQLITE_BACKUP_NAME)
+        val backupDbFile = File(sourceStagingDir, SQLITE_BACKUP_NAME)
         val hasKeystore2 = RootShell.execute("[ -f $KEYSTORE2_DB ] && echo 1 || echo 0").stdout.trim() == "1"
-        if (hasKeystore2 && backupDb.exists() && backupDb.length() > 0) {
+        if (hasKeystore2 && backupDbFile.exists() && backupDbFile.length() > 0) {
             val appUid = context.applicationInfo.uid
+            val appCtx = RootShell.execute("ls -Zd ${context.cacheDir.absolutePath} 2>/dev/null | awk '{print \$1}'").stdout.trim()
             val timestamp = System.currentTimeMillis()
             val tempWorkingDb = File(context.cacheDir, "keystore2_restore_work_$timestamp.sqlite")
             val localImportDb = File(context.cacheDir, "keystore2_restore_import_$timestamp.sqlite")
 
             try {
-                // Copy current persistent.sqlite AND backupDb to app cache with app ownership and SELinux label
+                val chconPart = if (appCtx.isNotBlank() && appCtx.startsWith("u:object_r:")) " && chcon $appCtx ${tempWorkingDb.absolutePath} ${localImportDb.absolutePath}" else ""
                 RootShell.execute(
                     "cp -p $KEYSTORE2_DB ${tempWorkingDb.absolutePath} && " +
-                    "chown $appUid:$appUid ${tempWorkingDb.absolutePath} && " +
-                    "chmod 600 ${tempWorkingDb.absolutePath} && " +
-                    "restorecon -F ${tempWorkingDb.absolutePath} && " +
-                    "cp ${backupDb.absolutePath} ${localImportDb.absolutePath} && " +
-                    "chown $appUid:$appUid ${localImportDb.absolutePath} && " +
-                    "chmod 600 ${localImportDb.absolutePath} && " +
-                    "restorecon -F ${localImportDb.absolutePath}"
+                    "cp ${backupDbFile.absolutePath} ${localImportDb.absolutePath} && " +
+                    "chown $appUid:$appUid ${tempWorkingDb.absolutePath} ${localImportDb.absolutePath} && " +
+                    "chmod 600 ${tempWorkingDb.absolutePath} ${localImportDb.absolutePath}$chconPart"
                 )
 
                 if (tempWorkingDb.exists() && tempWorkingDb.length() > 0 && localImportDb.exists() && localImportDb.length() > 0) {
-                    var db: SQLiteDatabase? = null
+                    var targetDb: SQLiteDatabase? = null
+                    var backupDb: SQLiteDatabase? = null
                     try {
-                        db = SQLiteDatabase.openDatabase(tempWorkingDb.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
-                        db.beginTransaction()
-                        try {
-                            db.execSQL("ATTACH DATABASE '${localImportDb.absolutePath}' AS backup_db")
+                        targetDb = SQLiteDatabase.openDatabase(tempWorkingDb.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
+                        backupDb = SQLiteDatabase.openDatabase(localImportDb.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
 
-                            // Check if backup database contains blobmetadata table
-                            var hasBlobMetadata = false
-                            db.rawQuery("SELECT name FROM backup_db.sqlite_master WHERE type='table' AND name='blobmetadata'", null).use { cursor ->
-                                hasBlobMetadata = cursor.count > 0
-                            }
+                        // Check if backup has keys
+                        var backupKeyCount = 0
+                        backupDb.rawQuery("SELECT count(*) FROM keyentry", null).use { c ->
+                            if (c.moveToFirst()) backupKeyCount = c.getInt(0)
+                        }
+                        Log.d(TAG, "Restoring Keystore 2.0: found $backupKeyCount key(s) in backup for remapping to UID $newUid")
 
-                            // Delete any old keyentries for this newUid to avoid collisions
-                            if (hasBlobMetadata) {
-                                db.execSQL("DELETE FROM blobmetadata WHERE blobentryid IN (SELECT id FROM blobentry WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $newUid))")
-                            }
-                            db.execSQL("DELETE FROM blobentry WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $newUid)")
-                            db.execSQL("DELETE FROM keyparameter WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $newUid)")
-                            db.execSQL("DELETE FROM keymetadata WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $newUid)")
-                            db.execSQL("DELETE FROM grant WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $newUid)")
-                            db.execSQL("DELETE FROM keyentry WHERE namespace = $newUid")
-
-                            // Check if backup keys collide with any existing keys in persistent.sqlite for OTHER apps
-                            var keyCollisions = 0
-                            db.rawQuery("SELECT count(*) FROM keyentry WHERE id IN (SELECT id FROM backup_db.keyentry)", null).use { cursor ->
-                                if (cursor.moveToFirst()) keyCollisions = cursor.getInt(0)
-                            }
-                            if (keyCollisions > 0) {
-                                var maxKeyId = 0L
-                                db.rawQuery("SELECT COALESCE(MAX(abs(id)), 0) FROM keyentry", null).use { cursor ->
-                                    if (cursor.moveToFirst()) maxKeyId = cursor.getLong(0)
+                        if (backupKeyCount > 0) {
+                            targetDb.beginTransaction()
+                            try {
+                                // 1. Clean up existing keys for newUid
+                                val hasBlobMeta = tableExists(targetDb, "blobmetadata")
+                                if (hasBlobMeta) {
+                                    targetDb.execSQL("DELETE FROM blobmetadata WHERE blobentryid IN (SELECT id FROM blobentry WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $newUid))")
                                 }
-                                var maxBlobId = 0L
-                                db.rawQuery("SELECT COALESCE(MAX(abs(id)), 0) FROM blobentry", null).use { cursor ->
-                                    if (cursor.moveToFirst()) maxBlobId = cursor.getLong(0)
+                                targetDb.execSQL("DELETE FROM blobentry WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $newUid)")
+                                targetDb.execSQL("DELETE FROM keyparameter WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $newUid)")
+                                targetDb.execSQL("DELETE FROM keymetadata WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $newUid)")
+                                targetDb.execSQL("DELETE FROM grant WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $newUid)")
+                                targetDb.execSQL("DELETE FROM keyentry WHERE namespace = $newUid")
+
+                                // 2. Insert restored keyentry with namespace remapped to newUid
+                                copyTableWithRemap(
+                                    sourceDb = backupDb,
+                                    targetDb = targetDb,
+                                    tableName = "keyentry",
+                                    selectQuery = "SELECT * FROM keyentry",
+                                    remapColumn = "namespace",
+                                    remapValue = newUid.toLong()
+                                )
+
+                                // 3. Insert blobentry
+                                copyTable(
+                                    sourceDb = backupDb,
+                                    targetDb = targetDb,
+                                    tableName = "blobentry",
+                                    createTableSql = "",
+                                    selectQuery = "SELECT * FROM blobentry"
+                                )
+
+                                // 4. Insert blobmetadata if present
+                                if (hasBlobMeta && tableExists(backupDb, "blobmetadata")) {
+                                    copyTable(
+                                        sourceDb = backupDb,
+                                        targetDb = targetDb,
+                                        tableName = "blobmetadata",
+                                        createTableSql = "",
+                                        selectQuery = "SELECT * FROM blobmetadata"
+                                    )
                                 }
-                                val keyOffset = maxKeyId + 1000L
-                                val blobOffset = maxBlobId + 1000L
 
-                                if (hasBlobMetadata) {
-                                    var maxBlobMetaId = 0L
-                                    db.rawQuery("SELECT COALESCE(MAX(abs(id)), 0) FROM blobmetadata", null).use { cursor ->
-                                        if (cursor.moveToFirst()) maxBlobMetaId = cursor.getLong(0)
-                                    }
-                                    val blobMetaOffset = maxBlobMetaId + 1000L
-                                    db.execSQL("UPDATE backup_db.blobmetadata SET blobentryid = blobentryid + $blobOffset, id = id + $blobMetaOffset")
-                                }
-                                db.execSQL("UPDATE backup_db.blobentry SET keyentryid = keyentryid + $keyOffset, id = id + $blobOffset")
-                                db.execSQL("UPDATE backup_db.keyparameter SET keyentryid = keyentryid + $keyOffset")
-                                db.execSQL("UPDATE backup_db.keymetadata SET keyentryid = keyentryid + $keyOffset")
-                                db.execSQL("UPDATE backup_db.grant SET keyentryid = keyentryid + $keyOffset")
-                                db.execSQL("UPDATE backup_db.keyentry SET id = id + $keyOffset")
+                                // 5. Insert keyparameter
+                                copyTable(
+                                    sourceDb = backupDb,
+                                    targetDb = targetDb,
+                                    tableName = "keyparameter",
+                                    createTableSql = "",
+                                    selectQuery = "SELECT * FROM keyparameter"
+                                )
+
+                                // 6. Insert keymetadata
+                                copyTable(
+                                    sourceDb = backupDb,
+                                    targetDb = targetDb,
+                                    tableName = "keymetadata",
+                                    createTableSql = "",
+                                    selectQuery = "SELECT * FROM keymetadata"
+                                )
+
+                                // 7. Insert grant
+                                copyTable(
+                                    sourceDb = backupDb,
+                                    targetDb = targetDb,
+                                    tableName = "grant",
+                                    createTableSql = "",
+                                    selectQuery = "SELECT * FROM grant"
+                                )
+
+                                targetDb.setTransactionSuccessful()
+                                restoredAny = true
+                                Log.d(TAG, "Successfully restored and remapped $backupKeyCount Keystore 2.0 key(s) to UID $newUid")
+                            } finally {
+                                targetDb.endTransaction()
                             }
-
-                            // Insert restored keys with remap to newUid
-                            db.execSQL(
-                                "INSERT OR REPLACE INTO keyentry (id, key_type, domain, namespace, alias, state, km_uuid) " +
-                                "SELECT id, key_type, domain, $newUid, alias, state, km_uuid FROM backup_db.keyentry"
-                            )
-                            db.execSQL("INSERT OR REPLACE INTO blobentry SELECT * FROM backup_db.blobentry")
-                            if (hasBlobMetadata) {
-                                db.execSQL("INSERT OR REPLACE INTO blobmetadata SELECT * FROM backup_db.blobmetadata")
-                            }
-                            db.execSQL("INSERT OR REPLACE INTO keyparameter SELECT * FROM backup_db.keyparameter")
-                            db.execSQL("INSERT OR REPLACE INTO keymetadata SELECT * FROM backup_db.keymetadata")
-                            db.execSQL("INSERT OR REPLACE INTO grant SELECT * FROM backup_db.grant")
-
-                            db.execSQL("DETACH DATABASE backup_db")
-                            db.setTransactionSuccessful()
-                            restoredAny = true
-                            Log.d(TAG, "Successfully remapped and restored Keystore 2.0 keys from $oldUid to $newUid")
-                        } finally {
-                            db.endTransaction()
                         }
                     } catch (e: Exception) {
                         Log.e(TAG, "Error restoring Keystore 2.0 database: ${e.message}", e)
                     } finally {
-                        db?.close()
+                        backupDb?.close()
+                        targetDb?.close()
                     }
 
                     if (restoredAny) {

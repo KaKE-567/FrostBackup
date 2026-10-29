@@ -96,12 +96,21 @@ class BackupEngine(private val context: Context) {
                 ssaid = SSAIDManager.getSSAID(app.packageName)
             }
 
+            val liveUid = try {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    context.packageManager.getPackageInfo(app.packageName, android.content.pm.PackageManager.PackageInfoFlags.of(0)).applicationInfo?.uid
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.packageManager.getPackageInfo(app.packageName, 0).applicationInfo?.uid
+                }
+            } catch (_: Exception) { null } ?: app.uid
+
             // 5. Capture Keystore
             var hasKeystore = false
             if (config.includeKeystore) {
                 onProgress(BackupProgress("Extracting Keystore encryption tokens…", 0.75f, app.appName, app.packageName, BackupSubStep.KEYSTORE))
                 val keystoreStaging = File(payloadPath, "keystore")
-                hasKeystore = KeystoreManager.backupKeystoreForUid(context, app.uid, keystoreStaging)
+                hasKeystore = KeystoreManager.backupKeystoreForUid(context, liveUid, keystoreStaging)
             }
 
             // 6. Permissions
@@ -125,7 +134,7 @@ class BackupEngine(private val context: Context) {
                 versionName = app.versionName,
                 versionCode = app.versionCode,
                 targetSdk = 37,
-                originalUid = app.uid,
+                originalUid = liveUid,
                 backupTimestamp = timestamp,
                 isEncrypted = config.encrypt,
                 ssaid = ssaid,
