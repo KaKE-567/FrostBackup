@@ -237,7 +237,7 @@ class RestoreEngine(private val context: Context) {
             val hasKeystoreFiles = RootShell.execute("[ -d $stagingPath/keystore ] && [ \"$(ls -A $stagingPath/keystore 2>/dev/null)\" ] && echo 1 || echo 0").stdout.trim() == "1"
             if (metadata.hasKeystore || hasKeystoreFiles) {
                 onProgress(RestoreProgress("Restoring Keystore cryptographic keys…", 0.90f, metadata.appName, pkg, RestoreSubStep.KEYSTORE))
-                KeystoreManager.restoreKeystoreForUid(metadata.originalUid, newUid, keystoreStaging)
+                KeystoreManager.restoreKeystoreForUid(context, metadata.originalUid, newUid, keystoreStaging)
             }
 
             // 11. Restore Permissions

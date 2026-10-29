@@ -170,7 +170,10 @@ fun BackupExecutionFlow(
                 onDismiss()
             }
         },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
         ExecutionFlowSurface(
             operationType = "Backup",
@@ -256,7 +259,10 @@ fun RestoreExecutionFlow(
                 onDismiss()
             }
         },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
         ExecutionFlowSurface(
             operationType = "Restore",
@@ -668,7 +674,8 @@ private fun ExecutionFlowSurface(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 18.dp)
+                    .navigationBarsPadding()
+                    .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 28.dp)
             ) {
                 Button(
                     onClick = onActionClick,

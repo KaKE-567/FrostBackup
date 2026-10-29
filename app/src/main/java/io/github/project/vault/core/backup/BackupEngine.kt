@@ -105,7 +105,7 @@ class BackupEngine(private val context: Context) {
             if (config.includeKeystore) {
                 onProgress(BackupProgress("Extracting Keystore encryption tokens…", 0.75f, app.appName, app.packageName, BackupSubStep.KEYSTORE))
                 val keystoreStaging = File(payloadPath, "keystore")
-                hasKeystore = KeystoreManager.backupKeystoreForUid(app.uid, keystoreStaging)
+                hasKeystore = KeystoreManager.backupKeystoreForUid(context, app.uid, keystoreStaging)
             }
 
             // 6. Permissions
