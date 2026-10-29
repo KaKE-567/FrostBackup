@@ -23,20 +23,33 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
 
       - name: Set up Android SDK Platform 37
         run: |
-          LATEST_PLATFORM=$(ls -d $ANDROID_HOME/platforms/android-* 2>/dev/null | sort -V | tail -n 1)
-          echo "Found latest platform: $LATEST_PLATFORM"
-          mkdir -p $ANDROID_HOME/platforms/android-37
-          cp -r $LATEST_PLATFORM/* $ANDROID_HOME/platforms/android-37/
-          if [ -f $ANDROID_HOME/platforms/android-37/source.properties ]; then
-            sed -i 's/AndroidVersion.ApiLevel=.*/AndroidVersion.ApiLevel=37/' $ANDROID_HOME/platforms/android-37/source.properties
-            sed -i 's/Platform.Version=.*/Platform.Version=17/' $ANDROID_HOME/platforms/android-37/source.properties
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-37" || true
+          if [ ! -f "$ANDROID_HOME/platforms/android-37/android.jar" ]; then
+            echo "platforms;android-37 not available via sdkmanager, provisioning from latest platform..."
+            LATEST_PLATFORM=$(ls -d $ANDROID_HOME/platforms/android-* 2>/dev/null | grep -v 'android-37$' | sort -V | tail -n 1)
+            echo "Found latest platform: $LATEST_PLATFORM"
+            mkdir -p $ANDROID_HOME/platforms/android-37
+            cp -r $LATEST_PLATFORM/* $ANDROID_HOME/platforms/android-37/
+            rm -f $ANDROID_HOME/platforms/android-37/package.xml
+            if [ -f $ANDROID_HOME/platforms/android-37/source.properties ]; then
+              sed -i 's/AndroidVersion.ApiLevel=.*/AndroidVersion.ApiLevel=37/' $ANDROID_HOME/platforms/android-37/source.properties
+              sed -i 's/Platform.Version=.*/Platform.Version=17/' $ANDROID_HOME/platforms/android-37/source.properties
+              sed -i '/AndroidVersion.Codename/d' $ANDROID_HOME/platforms/android-37/source.properties
+              sed -i 's/Pkg.Desc=.*/Pkg.Desc=Android SDK Platform 37/' $ANDROID_HOME/platforms/android-37/source.properties
+              sed -i 's/Pkg.Path=.*/Pkg.Path=platforms;android-37/' $ANDROID_HOME/platforms/android-37/source.properties
+            fi
+            if [ -f $ANDROID_HOME/platforms/android-37/build.prop ]; then
+              sed -i 's/ro.build.version.sdk=.*/ro.build.version.sdk=37/' $ANDROID_HOME/platforms/android-37/build.prop
+              sed -i '/ro.build.version.codename/d' $ANDROID_HOME/platforms/android-37/build.prop
+            fi
           fi
-          if [ -f $ANDROID_HOME/platforms/android-37/build.prop ]; then
-            sed -i 's/ro.build.version.sdk=.*/ro.build.version.sdk=37/' $ANDROID_HOME/platforms/android-37/build.prop
-          fi
+          ls -la $ANDROID_HOME/platforms/android-37/
 
       - name: Build Debug APK
         run: gradle assembleDebug --stacktrace
