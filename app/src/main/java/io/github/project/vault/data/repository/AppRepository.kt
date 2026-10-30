@@ -10,7 +10,9 @@ import androidx.core.graphics.drawable.toBitmap
 import io.github.project.vault.data.model.AppInfo
 import io.github.project.vault.data.model.BackupMetadata
 import io.github.project.vault.ui.components.AppIconCache
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -86,14 +88,16 @@ class AppRepository(
 
         cachedInstalledApps = apps
 
-        // Pre-warm icon cache for top 40 non-system apps in background IO
-        val topApps = apps.filter { !it.isSystemApp }.take(40)
-        for (app in topApps) {
-            if (AppIconCache.get(app.packageName) == null) {
-                runCatching {
-                    val drawable = packageManager.getApplicationIcon(app.packageName)
-                    val bmp = drawable.toBitmap(100, 100, Bitmap.Config.ARGB_8888).asImageBitmap()
-                    AppIconCache.put(app.packageName, bmp)
+        // Pre-warm icon cache for top 40 non-system apps asynchronously in background IO
+        CoroutineScope(Dispatchers.IO).launch {
+            val topApps = apps.filter { !it.isSystemApp }.take(40)
+            for (app in topApps) {
+                if (AppIconCache.get(app.packageName) == null) {
+                    runCatching {
+                        val drawable = packageManager.getApplicationIcon(app.packageName)
+                        val bmp = drawable.toBitmap(72, 72, Bitmap.Config.ARGB_8888).asImageBitmap()
+                        AppIconCache.put(app.packageName, bmp)
+                    }
                 }
             }
         }

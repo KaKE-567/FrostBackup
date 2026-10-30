@@ -122,15 +122,9 @@ fun RestoreScreen(
         isLoading = false
     }
 
-    LaunchedEffect(Unit) {
-        if (backups.isEmpty()) {
-            reloadBackups(forceRefresh = false)
-        }
-    }
-
     LaunchedEffect(isSelected) {
-        if (isSelected) {
-            reloadBackups(forceRefresh = true)
+        if (isSelected && backups.isEmpty()) {
+            reloadBackups(forceRefresh = false)
         }
     }
 

@@ -123,10 +123,6 @@ fun TelephonyScreen(
         isLoadingStats = false
     }
 
-    LaunchedEffect(Unit) {
-        refreshData()
-    }
-
     LaunchedEffect(isSelected) {
         if (isSelected && (smsCount == 0 && callCount == 0 && wifiCount == 0)) {
             refreshData()

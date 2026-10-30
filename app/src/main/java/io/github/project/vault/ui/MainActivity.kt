@@ -191,20 +191,14 @@ class MainActivity : ComponentActivity() {
                                                 val isSelected = selectedTab == index
 
                                                 val iconScale by animateFloatAsState(
-                                                    targetValue = if (isSelected) 1.1f else 1f,
-                                                    animationSpec = spring(
-                                                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                                                        stiffness = Spring.StiffnessLow
-                                                    ),
+                                                    targetValue = if (isSelected) 1.08f else 1f,
+                                                    animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
                                                     label = "tabIconScale"
                                                 )
 
                                                 val tabWeight by animateFloatAsState(
-                                                    targetValue = if (isSelected) 1.75f else 1.0f,
-                                                    animationSpec = spring(
-                                                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                                                        stiffness = Spring.StiffnessLow
-                                                    ),
+                                                    targetValue = if (isSelected) 1.6f else 1.0f,
+                                                    animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
                                                     label = "tabWeight"
                                                 )
 
@@ -219,13 +213,7 @@ class MainActivity : ComponentActivity() {
                                                             selectedTab = index
                                                             if (pagerState.currentPage != index) {
                                                                 pagerScope.launch {
-                                                                    pagerState.animateScrollToPage(
-                                                                        page = index,
-                                                                        animationSpec = tween(
-                                                                            durationMillis = 350,
-                                                                            easing = FastOutSlowInEasing
-                                                                        )
-                                                                    )
+                                                                    pagerState.scrollToPage(index)
                                                                 }
                                                             }
                                                         },
@@ -279,7 +267,7 @@ class MainActivity : ComponentActivity() {
                             ) { innerPadding ->
                                 HorizontalPager(
                                     state = pagerState,
-                                    beyondBoundsPageCount = 1,
+                                    beyondBoundsPageCount = 0,
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .padding(innerPadding)
