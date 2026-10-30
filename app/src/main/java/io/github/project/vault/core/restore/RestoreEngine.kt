@@ -72,6 +72,10 @@ class RestoreEngine(private val context: Context) {
             val pkg = metadata.packageName
             onProgress(RestoreProgress("Restoring ${metadata.appName}…", 0.35f, metadata.appName, pkg, RestoreSubStep.PREPARING))
 
+            // Ensure app is fully terminated before reinstalling or touching data
+            RootShell.execute("am force-stop $pkg 2>/dev/null || true")
+            RootShell.execute("pkill -9 -f $pkg 2>/dev/null || true")
+
             // 4. Reinstall APK if present
             if (metadata.hasApk) {
                 onProgress(RestoreProgress("Reinstalling APK packages…", 0.45f, metadata.appName, pkg, RestoreSubStep.APK))
@@ -267,6 +271,9 @@ class RestoreEngine(private val context: Context) {
                     needsReboot = true
                 }
             }
+
+            // Flush all filesystem write caches to disk
+            RootShell.execute("sync")
 
             // 13. Stop app completely so it launches fresh with restored data & keys
             RootShell.execute("am force-stop $pkg 2>/dev/null || true")
