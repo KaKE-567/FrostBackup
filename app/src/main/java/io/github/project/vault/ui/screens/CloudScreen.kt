@@ -126,6 +126,7 @@ fun CloudScreen(
 
     LaunchedEffect(isSelected) {
         if (isSelected && cloudBackups.isEmpty()) {
+            kotlinx.coroutines.delay(350)
             refreshCloudState(forceRefresh = false)
         }
     }

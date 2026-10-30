@@ -125,6 +125,7 @@ fun TelephonyScreen(
 
     LaunchedEffect(isSelected) {
         if (isSelected && (smsCount == 0 && callCount == 0 && wifiCount == 0)) {
+            kotlinx.coroutines.delay(350)
             refreshData()
         }
     }

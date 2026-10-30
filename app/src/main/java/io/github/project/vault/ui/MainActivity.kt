@@ -222,10 +222,6 @@ class MainActivity : ComponentActivity() {
                                                             selectedTab = index
                                                             if (pagerState.currentPage != index) {
                                                                 pagerScope.launch {
-                                                                    if (kotlin.math.abs(pagerState.currentPage - index) > 1) {
-                                                                        val jumpTo = if (index > pagerState.currentPage) index - 1 else index + 1
-                                                                        pagerState.scrollToPage(jumpTo)
-                                                                    }
                                                                     pagerState.animateScrollToPage(
                                                                         page = index,
                                                                         animationSpec = tween(

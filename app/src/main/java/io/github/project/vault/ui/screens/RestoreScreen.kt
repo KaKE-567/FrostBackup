@@ -124,6 +124,7 @@ fun RestoreScreen(
 
     LaunchedEffect(isSelected) {
         if (isSelected && backups.isEmpty()) {
+            kotlinx.coroutines.delay(350)
             reloadBackups(forceRefresh = false)
         }
     }

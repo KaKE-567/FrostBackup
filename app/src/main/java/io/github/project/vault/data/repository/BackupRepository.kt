@@ -12,10 +12,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.io.File
+import androidx.compose.runtime.Stable
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
+@Stable
 class BackupRepository(private val context: Context) {
     private val json = Json {
         ignoreUnknownKeys = true

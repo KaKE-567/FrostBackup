@@ -10,12 +10,14 @@ import androidx.core.graphics.drawable.toBitmap
 import io.github.project.vault.data.model.AppInfo
 import io.github.project.vault.data.model.BackupMetadata
 import io.github.project.vault.ui.components.AppIconCache
+import androidx.compose.runtime.Stable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
+@Stable
 class AppRepository(
     private val context: Context,
     private val backupRepository: BackupRepository

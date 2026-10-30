@@ -115,6 +115,7 @@ fun SettingsScreen(
 
     LaunchedEffect(isSelected) {
         if (isSelected && (rootInfo == "Checking…" || availableTargets.isEmpty())) {
+            kotlinx.coroutines.delay(350)
             withContext(Dispatchers.IO) {
                 val targets = StorageLocationManager.getAvailableStorageTargets(context)
                 val currentPath = backupRepository.getBackupDirectory().absolutePath
