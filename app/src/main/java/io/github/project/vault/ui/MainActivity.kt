@@ -191,14 +191,20 @@ class MainActivity : ComponentActivity() {
                                                 val isSelected = selectedTab == index
 
                                                 val iconScale by animateFloatAsState(
-                                                    targetValue = if (isSelected) 1.08f else 1f,
-                                                    animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+                                                    targetValue = if (isSelected) 1.12f else 1f,
+                                                    animationSpec = spring(
+                                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                        stiffness = Spring.StiffnessLow
+                                                    ),
                                                     label = "tabIconScale"
                                                 )
 
                                                 val tabWeight by animateFloatAsState(
-                                                    targetValue = if (isSelected) 1.6f else 1.0f,
-                                                    animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+                                                    targetValue = if (isSelected) 1.75f else 1.0f,
+                                                    animationSpec = spring(
+                                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                        stiffness = Spring.StiffnessLow
+                                                    ),
                                                     label = "tabWeight"
                                                 )
 
@@ -213,7 +219,17 @@ class MainActivity : ComponentActivity() {
                                                             selectedTab = index
                                                             if (pagerState.currentPage != index) {
                                                                 pagerScope.launch {
-                                                                    pagerState.scrollToPage(index)
+                                                                    if (kotlin.math.abs(pagerState.currentPage - index) > 1) {
+                                                                        val jumpTo = if (index > pagerState.currentPage) index - 1 else index + 1
+                                                                        pagerState.scrollToPage(jumpTo)
+                                                                    }
+                                                                    pagerState.animateScrollToPage(
+                                                                        page = index,
+                                                                        animationSpec = tween(
+                                                                            durationMillis = 300,
+                                                                            easing = FastOutSlowInEasing
+                                                                        )
+                                                                    )
                                                                 }
                                                             }
                                                         },
@@ -267,7 +283,7 @@ class MainActivity : ComponentActivity() {
                             ) { innerPadding ->
                                 HorizontalPager(
                                     state = pagerState,
-                                    beyondBoundsPageCount = 0,
+                                    beyondBoundsPageCount = 1,
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .padding(innerPadding)
