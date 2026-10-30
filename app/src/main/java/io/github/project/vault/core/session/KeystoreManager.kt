@@ -189,8 +189,9 @@ object KeystoreManager {
                                 "cp ${localExportDb.absolutePath} ${targetDb.absolutePath} && " +
                                 "chmod 644 ${targetDb.absolutePath}"
                             )
-                            backedUpAny = targetDb.exists() && targetDb.length() > 0
-                            Log.d(TAG, "Successfully backed up Keystore 2.0 keys for UID $uid (${targetDb.length()} bytes)")
+                            backedUpAny = (targetDb.exists() && targetDb.length() > 0) ||
+                                    RootShell.execute("[ -s \"${targetDb.absolutePath}\" ] && echo 1 || echo 0").stdout.trim() == "1"
+                            Log.d(TAG, "Successfully backed up Keystore 2.0 keys for UID $uid")
                         }
                     } catch (e: Exception) {
                         Log.e(TAG, "Error querying/backing up Keystore 2.0: ${e.message}", e)
@@ -224,14 +225,17 @@ object KeystoreManager {
     }
 
     suspend fun restoreKeystoreForUid(context: Context, oldUid: Int, newUid: Int, sourceStagingDir: File): Boolean = withContext(Dispatchers.IO) {
-        if (newUid <= 0 || !sourceStagingDir.exists()) return@withContext false
+        val stagingExists = sourceStagingDir.exists() || RootShell.execute("[ -d \"${sourceStagingDir.absolutePath}\" ] && echo 1 || echo 0").stdout.trim() == "1"
+        if (newUid <= 0 || !stagingExists) return@withContext false
         val stagingPath = sourceStagingDir.absolutePath
         var restoredAny = false
 
         // 1. Keystore 2.0 Restore
         val backupDbFile = File(sourceStagingDir, SQLITE_BACKUP_NAME)
+        val backupDbFileExists = (backupDbFile.exists() && backupDbFile.length() > 0) ||
+                RootShell.execute("[ -s \"${backupDbFile.absolutePath}\" ] && echo 1 || echo 0").stdout.trim() == "1"
         val hasKeystore2 = RootShell.execute("[ -f $KEYSTORE2_DB ] && echo 1 || echo 0").stdout.trim() == "1"
-        if (hasKeystore2 && backupDbFile.exists() && backupDbFile.length() > 0) {
+        if (hasKeystore2 && backupDbFileExists) {
             val appUid = context.applicationInfo.uid
             val appCtx = RootShell.execute("ls -Zd ${context.cacheDir.absolutePath} 2>/dev/null | awk '{print \$1}'").stdout.trim()
             val timestamp = System.currentTimeMillis()
@@ -264,7 +268,7 @@ object KeystoreManager {
                         if (backupKeyCount > 0) {
                             targetDb.beginTransaction()
                             try {
-                                // 1. Clean up existing keys for newUid
+                                // 1. Clean up existing keys for newUid and any key IDs matching the backup
                                 val hasBlobMeta = tableExists(targetDb, "blobmetadata")
                                 if (hasBlobMeta) {
                                     targetDb.execSQL("DELETE FROM blobmetadata WHERE blobentryid IN (SELECT id FROM blobentry WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $newUid))")
@@ -274,6 +278,23 @@ object KeystoreManager {
                                 targetDb.execSQL("DELETE FROM keymetadata WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $newUid)")
                                 targetDb.execSQL("DELETE FROM grant WHERE keyentryid IN (SELECT id FROM keyentry WHERE namespace = $newUid)")
                                 targetDb.execSQL("DELETE FROM keyentry WHERE namespace = $newUid")
+
+                                val restoredKeyIds = mutableListOf<Long>()
+                                backupDb.rawQuery("SELECT id FROM keyentry", null).use { c ->
+                                    while (c.moveToNext()) {
+                                        restoredKeyIds.add(c.getLong(0))
+                                    }
+                                }
+                                for (keyId in restoredKeyIds) {
+                                    if (hasBlobMeta) {
+                                        targetDb.execSQL("DELETE FROM blobmetadata WHERE blobentryid IN (SELECT id FROM blobentry WHERE keyentryid = $keyId)")
+                                    }
+                                    targetDb.execSQL("DELETE FROM blobentry WHERE keyentryid = $keyId")
+                                    targetDb.execSQL("DELETE FROM keyparameter WHERE keyentryid = $keyId")
+                                    targetDb.execSQL("DELETE FROM keymetadata WHERE keyentryid = $keyId")
+                                    targetDb.execSQL("DELETE FROM grant WHERE keyentryid = $keyId")
+                                    targetDb.execSQL("DELETE FROM keyentry WHERE id = $keyId")
+                                }
 
                                 // 2. Insert restored keyentry with namespace remapped to newUid
                                 copyTableWithRemap(
@@ -347,14 +368,16 @@ object KeystoreManager {
                     }
 
                     if (restoredAny) {
-                        // Copy back into /data/misc/keystore/persistent.sqlite with correct permissions & reload daemon
+                        // Kill keystore2, copy into /data/misc/keystore/persistent.sqlite, fix permissions and reload
                         RootShell.execute(
+                            "killall -9 keystore2 2>/dev/null || pkill -9 -f keystore2 2>/dev/null || kill -9 $(pidof keystore2 2>/dev/null) 2>/dev/null || true; " +
                             "cp ${tempWorkingDb.absolutePath} $KEYSTORE2_DB && " +
                             "chown keystore:keystore $KEYSTORE2_DB && " +
                             "chmod 600 $KEYSTORE2_DB && " +
+                            "chcon u:object_r:keystore_data_file:s0 $KEYSTORE2_DB 2>/dev/null; " +
                             "restorecon $KEYSTORE2_DB && " +
                             "rm -f /data/misc/keystore/persistent.sqlite-wal /data/misc/keystore/persistent.sqlite-shm && " +
-                            "pkill -9 -f android.system.keystore2 2>/dev/null || true"
+                            "killall -9 keystore2 2>/dev/null || pkill -9 -f keystore2 2>/dev/null || kill -9 $(pidof keystore2 2>/dev/null) 2>/dev/null || true"
                         )
                     }
                 }
