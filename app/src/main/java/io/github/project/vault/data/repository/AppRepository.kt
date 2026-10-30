@@ -88,9 +88,10 @@ class AppRepository(
 
         cachedInstalledApps = apps
 
-        // Pre-warm icon cache for top 40 non-system apps asynchronously in background IO
+        // Pre-warm icon cache for top 30 non-system apps after UI stabilizes
         CoroutineScope(Dispatchers.IO).launch {
-            val topApps = apps.filter { !it.isSystemApp }.take(40)
+            kotlinx.coroutines.delay(1200)
+            val topApps = apps.filter { !it.isSystemApp }.take(30)
             for (app in topApps) {
                 if (AppIconCache.get(app.packageName) == null) {
                     runCatching {

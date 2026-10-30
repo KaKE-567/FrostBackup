@@ -92,6 +92,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun SettingsScreen(
     backupRepository: BackupRepository,
+    isSelected: Boolean = true,
     currentThemeMode: ThemeMode = ThemeMode.SYSTEM,
     currentKeyColor: Int = 0,
     onThemeChanged: (ThemeMode) -> Unit = {},
@@ -112,28 +113,30 @@ fun SettingsScreen(
     var currentStoragePath by remember { mutableStateOf(backupRepository.getBackupDirectory().absolutePath) }
     var showStorageSheet by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            val targets = StorageLocationManager.getAvailableStorageTargets(context)
-            val currentPath = backupRepository.getBackupDirectory().absolutePath
-            val rootAvailable = RootShell.isRootAvailable()
-            val idOutput = if (rootAvailable) {
-                RootShell.execute("id").stdout.ifBlank { "Root Available" }
-            } else {
-                "No root access granted"
-            }
-            val selinuxOutput = if (rootAvailable) {
-                RootShell.execute("getenforce").stdout.ifBlank { "Unknown" }
-            } else {
-                "Unknown"
-            }
+    LaunchedEffect(isSelected) {
+        if (isSelected && (rootInfo == "Checking…" || availableTargets.isEmpty())) {
+            withContext(Dispatchers.IO) {
+                val targets = StorageLocationManager.getAvailableStorageTargets(context)
+                val currentPath = backupRepository.getBackupDirectory().absolutePath
+                val rootAvailable = RootShell.isRootAvailable()
+                val idOutput = if (rootAvailable) {
+                    RootShell.execute("id").stdout.ifBlank { "Root Available" }
+                } else {
+                    "No root access granted"
+                }
+                val selinuxOutput = if (rootAvailable) {
+                    RootShell.execute("getenforce").stdout.ifBlank { "Unknown" }
+                } else {
+                    "Unknown"
+                }
 
-            withContext(Dispatchers.Main) {
-                availableTargets = targets
-                currentStoragePath = currentPath
-                isRooted = rootAvailable
-                rootInfo = idOutput
-                selinuxMode = selinuxOutput
+                withContext(Dispatchers.Main) {
+                    availableTargets = targets
+                    currentStoragePath = currentPath
+                    isRooted = rootAvailable
+                    rootInfo = idOutput
+                    selinuxMode = selinuxOutput
+                }
             }
         }
     }

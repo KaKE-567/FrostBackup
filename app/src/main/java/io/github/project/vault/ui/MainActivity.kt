@@ -8,16 +8,19 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -153,9 +156,9 @@ class MainActivity : ComponentActivity() {
                             var selectedTab by remember { mutableIntStateOf(0) }
                             val pagerState = rememberPagerState(initialPage = 0, pageCount = { screens.size })
 
-                            LaunchedEffect(pagerState.settledPage) {
-                                if (pagerState.settledPage != selectedTab) {
-                                    selectedTab = pagerState.settledPage
+                            LaunchedEffect(pagerState.currentPage) {
+                                if (pagerState.currentPage != selectedTab) {
+                                    selectedTab = pagerState.currentPage
                                 }
                             }
 
@@ -193,17 +196,17 @@ class MainActivity : ComponentActivity() {
                                                 val iconScale by animateFloatAsState(
                                                     targetValue = if (isSelected) 1.12f else 1f,
                                                     animationSpec = spring(
-                                                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                                                        stiffness = Spring.StiffnessLow
+                                                        dampingRatio = 0.76f,
+                                                        stiffness = Spring.StiffnessMediumLow
                                                     ),
                                                     label = "tabIconScale"
                                                 )
 
                                                 val tabWeight by animateFloatAsState(
-                                                    targetValue = if (isSelected) 1.75f else 1.0f,
+                                                    targetValue = if (isSelected) 1.85f else 1.0f,
                                                     animationSpec = spring(
-                                                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                                                        stiffness = Spring.StiffnessLow
+                                                        dampingRatio = 0.82f,
+                                                        stiffness = Spring.StiffnessMediumLow
                                                     ),
                                                     label = "tabWeight"
                                                 )
@@ -226,7 +229,7 @@ class MainActivity : ComponentActivity() {
                                                                     pagerState.animateScrollToPage(
                                                                         page = index,
                                                                         animationSpec = tween(
-                                                                            durationMillis = 300,
+                                                                            durationMillis = 280,
                                                                             easing = FastOutSlowInEasing
                                                                         )
                                                                     )
@@ -242,12 +245,11 @@ class MainActivity : ComponentActivity() {
                                                                 scaleY = iconScale
                                                             }
                                                             .height(42.dp)
-                                                            .fillMaxWidth(if (isSelected) 0.96f else 0.6f)
+                                                            .fillMaxWidth(if (isSelected) 0.98f else 0.65f)
                                                             .background(
                                                                 color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
                                                                 shape = CircleShape
-                                                            )
-                                                            .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessLow)),
+                                                            ),
                                                         contentAlignment = Alignment.Center
                                                     ) {
                                                         Row(
@@ -261,16 +263,34 @@ class MainActivity : ComponentActivity() {
                                                                 tint = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                                                                 modifier = Modifier.size(22.dp)
                                                             )
-                                                            if (isSelected) {
-                                                                Spacer(modifier = Modifier.width(5.dp))
-                                                                Text(
-                                                                    text = screen.title,
-                                                                    style = MaterialTheme.typography.labelMedium,
-                                                                    fontWeight = FontWeight.SemiBold,
-                                                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                                                    maxLines = 1,
-                                                                    overflow = TextOverflow.Visible
+                                                            AnimatedVisibility(
+                                                                visible = isSelected,
+                                                                enter = fadeIn(animationSpec = tween(140, delayMillis = 30)) + expandHorizontally(
+                                                                    animationSpec = spring(
+                                                                        dampingRatio = 0.85f,
+                                                                        stiffness = Spring.StiffnessMediumLow
+                                                                    ),
+                                                                    expandFrom = Alignment.Start
+                                                                ),
+                                                                exit = fadeOut(animationSpec = tween(80)) + shrinkHorizontally(
+                                                                    animationSpec = spring(
+                                                                        dampingRatio = 0.85f,
+                                                                        stiffness = Spring.StiffnessMediumLow
+                                                                    ),
+                                                                    shrinkTowards = Alignment.Start
                                                                 )
+                                                            ) {
+                                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                                    Spacer(modifier = Modifier.width(5.dp))
+                                                                    Text(
+                                                                        text = screen.title,
+                                                                        style = MaterialTheme.typography.labelMedium,
+                                                                        fontWeight = FontWeight.SemiBold,
+                                                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                                        maxLines = 1,
+                                                                        softWrap = false
+                                                                    )
+                                                                }
                                                             }
                                                         }
                                                     }
@@ -303,9 +323,13 @@ class MainActivity : ComponentActivity() {
                                             backupRepository = backupRepository,
                                             isSelected = (selectedTab == 2)
                                         )
-                                        3 -> CloudScreen(backupRepository = backupRepository)
+                                        3 -> CloudScreen(
+                                            backupRepository = backupRepository,
+                                            isSelected = (selectedTab == 3)
+                                        )
                                         4 -> SettingsScreen(
                                             backupRepository = backupRepository,
+                                            isSelected = (selectedTab == 4),
                                             currentThemeMode = currentThemeMode,
                                             currentKeyColor = currentKeyColor,
                                             onThemeChanged = { newMode ->

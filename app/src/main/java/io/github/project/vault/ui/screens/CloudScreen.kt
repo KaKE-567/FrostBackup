@@ -82,6 +82,7 @@ import java.io.File
 @Composable
 fun CloudScreen(
     backupRepository: BackupRepository,
+    isSelected: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -123,8 +124,8 @@ fun CloudScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        if (cloudBackups.isEmpty()) {
+    LaunchedEffect(isSelected) {
+        if (isSelected && cloudBackups.isEmpty()) {
             refreshCloudState(forceRefresh = false)
         }
     }
